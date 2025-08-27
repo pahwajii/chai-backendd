@@ -8,7 +8,30 @@ dotenv.config({
 })
 
 
+app.on("error", (error) => {
+    console.error("App encountered an error:", error);
+    // Optional: process.exit(1); // Stop the server if critical
+});
+
+// 2. Connect to MongoDB and start server
 connectDB()
+    .then(() => {
+        const port = process.env.PORT || 8000;
+
+        const server = app.listen(port, () => {
+            console.log(`Server is running at port ${port}`);
+        });
+
+        // Forward server errors to app 'error' event
+        server.on("error", (err) => {
+            app.emit("error", err); // triggers the app.on("error") listener
+        });
+    })
+    .catch((err) => {
+        console.error("MongoDB connection failed!!!", err);
+        // Optional: exit the process if DB connection is critical
+        process.exit(1);
+    });
 
 
 
