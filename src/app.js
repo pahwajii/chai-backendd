@@ -46,11 +46,23 @@ true → Uses the qs library, allows deeply nested objects.
 
 false → Uses querystring library, supports only shallow objects.*/
 
-app.use(express.static)
+app.use(express.static("public"))
 /*/pdf store rkhna chahta hun media aayi koi usme 
 ham store krna chahte hai vo publicly using asset hai jokiham har jagh use kr payenge */
 app.use(cookieParser())
 
+//routes
 
+import userRouter from "./routes/user.routes.js"
+
+
+//routes declaration
+//firstly we were doing directly app.get and things ere gping good but now we have to bring middlewares and controller to get through the routes
+//Instead of defining routes directly in app.js, you import routers (like userRouter) from the routes folder.
+/*
+Each router handles a set of related routes and can use controllers for logic and middlewares for things like authentication.
+You mount the router with app.use("/api/v1/users", userRouter);, so all user-related routes are grouped under /api/v1/users.*/
+app.use("/api/v1/users",userRouter)
+//http://localhost:8000/api/v1/users => http://localhost:8000/api/v1/users/register
 
 export {app}

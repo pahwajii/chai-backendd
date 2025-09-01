@@ -1,11 +1,13 @@
 // require ('dotenv').config({ path: './env'})//
 import dotenv from "dotenv"
-
+import express from "express";
+import { app } from "./app.js";
 import connectDB from "./db/index.js"
 
 dotenv.config({
     path:"./env"
 })
+// const app = express();
 
 
 app.on("error", (error) => {
@@ -33,7 +35,11 @@ connectDB()
         process.exit(1);
     });
 
-
+// global app-level error handler (for express errors)
+// app.use((err, req, res, next) => {
+//     console.error("App error:", err.stack);
+//     res.status(500).json({ message: "Something went wrong!" });
+// });
 
 
 
