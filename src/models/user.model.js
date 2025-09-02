@@ -42,7 +42,7 @@ const userSchema = new Schema(
             type : String,
             required: [true, 'PASSWORD is required']
         },
-        refershToken :{
+        refreshToken :{
             type : String
         },
     },{
@@ -56,7 +56,7 @@ userSchema.pre("save",async function (next) {
     if(!this.isModified("password")) return next();
 
 
-    this.passoword = bcrypt.hash(this.passoword,10)//bcrypt.hash(what to encrypt,how many rounds)
+    this.passoword = await bcrypt.hash(this.passoword,10)//bcrypt.hash(what to encrypt,how many rounds)
     next()
 })//isse hamare har ek action per dikkat ho skti hai baar baar computer  password ko hash krke store kr rha hai jo ki bekar hai jab pass change ho tbhi ho ye sab bhi to ham isliye ek if condition lagadenge 
 
