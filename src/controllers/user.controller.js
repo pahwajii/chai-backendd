@@ -1,4 +1,3 @@
-import { log } from "console";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {ApiError} from "../utils/ApiError.js"
 import {User} from "../models/user.model.js"
@@ -53,7 +52,7 @@ const registerUser = asyncHandler(async(req,res)=> {
         throw new ApiError(400, "EMAIL MUST INCLUDE @")
     }
 
-    const existeduser = User.findOne({
+    const existeduser = await User.findOne({
         $or:[ {username} , {email} ]
     })
     if(existeduser){
@@ -62,14 +61,26 @@ const registerUser = asyncHandler(async(req,res)=> {
 
     // req.body ke andar sara ka sara data aata hai 
     //as we have put middleware in routes thus it gives us more access in "req.things"so we get access to files //multer gives access of req.files
-    const avatarLocalPath = req.files?.avatar[0]?.path// this gives a check on avatar's first property of multer that is the path decided for files that is stored in diskstorage go refer to multer.middleware.js
-    const coverImagePath = req.files?.coverImage[0]?.path;
+    console.log("req.files:", req.files);
+    const avatarLocalPath = req.files?.avatar[0]?.path
+    // this gives a check on avatar's first property of multer that is the path decided for files that is stored in diskstorage go refer to multer.middleware.js
+    console.log("avatarLocalPath:", avatarLocalPath);
+
+    // const coverImagePath = req.files?.coverImage[0]?.path;
+    // kabhi kanhi likhne me glti ho jati hai js me whenw euse ? so we can use direct if else in place of advanced if else
+
+    let coverimagelLocalPath;
+
+    if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length>0){
+        coverimagelLocalPath= req.files.coverImage[0].path
+    }
+
     if(!avatarLocalPath){
         throw new ApiError(400 , "AVATAR FILE IS REQUIRED")
     }
 
     const avatar = await uploadOnCloudinary(avatarLocalPath)
-    const coverImage = await uploadOnCloudinary(coverImagePath)
+    const coverImage = await uploadOnCloudinary(coverimagelLocalPath)
 
     if(!avatar){
         throw new ApiError(400 , "AVATAR FILE IS REQUIRED")
@@ -84,17 +95,17 @@ const registerUser = asyncHandler(async(req,res)=> {
         username : username.toLowerCase()
     })
 
-    const createduser = await User.findById(user._id)
+    const createdUser = await User.findById(user._id)
     .select(
         "-password -refreshToken"
     )
 
-    if(!createduser){
+    if(!createdUser){
         throw new ApiError(500 , "something went wrong while creating the user")
     }
 
     return res.status(201).json(
-        new ApiResponse(200,createduser,"User regidtered successfully")
+        new ApiResponse(200,createdUser,"User registered successfully")
     )
 })
 
