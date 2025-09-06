@@ -294,6 +294,144 @@ const refreshAccessToken = asyncHandler(async(req,res)=>{
 
 })
 
+const changeCurrentPassword = asyncHandler(async(req,res)=>{
+    // try to add more functionality
+    const{oldPassword, newPassword} = req.body
+    /*
+    from auth middleware 
+    
+        req.user = user;
+        next()
+        iska mtlb user to hai to ham req.user ke dwara user ki id nikal sakte hai 
+         */
+    const user = await User.findById(req.user?._id)
+    const ispasswordcorrect = user.isPasswordCorrect(oldPassword)
 
+    if(!ispasswordcorrect){
+        throw new ApiError(400,"invalid old password")
+    }
 
-export {registerUser, loginUser,logoutUser,refreshAccessToken}
+    user.password = newPassword
+    await user .save({validateBeforeSave : false})
+/*await user.save({ validateBeforeSave: false })
+
+user.save() saves the updated user document to MongoDB.
+
+validateBeforeSave: false:
+
+By default, Mongoose runs all schema validations when saving (e.g., required fields, format checks).
+
+Here, we skip validations because:
+
+We are only updating the password.
+
+Other fields may not meet validations temporarily (like optional fields).
+
+We want to avoid unnecessary validation errors.
+
+await ensures that the save operation completes before moving on*/
+    return res
+    .status(200)
+    .json(new ApiResponse(200,{},"password changed succcessfully"))
+})
+
+const getCurrentuser = asyncHandler(async(req,res)=>{
+    return res
+    .status(200)
+    .json(new ApiResponse(200, req.user, "current User Fetched successfully"))
+})
+
+const updateAccountDetails = asyncHandler(async(req,res)=>{
+    const {fullName,email}= req.body
+
+    if (!fullName || !email) {
+        throw new ApiError(200, "All fields are required")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set:{
+                fullName :fullName,
+                email :email
+            }
+        },
+        {new : true }
+    ).select("-password -refreshtoken")
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,user,"Account details updated successfully"))
+})
+
+const updateUserAvatar = asyncHandler(async(req,res)=>
+    {
+        const avatarLocalpath = req.file?.path
+
+        if(!avatarLocalpath){
+            throw new ApiError(400,"avatar file is missing")
+        }
+
+        const avatar = await uploadOnCloudinary(avatarLocalpath)
+
+        if(!avatar.url){
+            throw new ApiError(400,"Error while uploading on avatar")
+        }
+
+        const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set:{
+                avatar : avatar.url
+            }
+        },
+        {new : true }
+    ).select("-password -refreshtoken")
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,user,"Avatar updated successfully"))
+
+    })
+
+    const updateuserCoverImage = asyncHandler(async(req,res)=>
+    {
+        const coverImagelocalpath = req.file?.path
+
+        if(!coverImagelocalpath){
+            throw new ApiError(400,"coverimage file is missing")
+        }
+
+        const coverImage = await uploadOnCloudinary(coverImagelocalpath)
+
+        if(!coverImage.url){
+            throw new ApiError(400,"Error while uploading on coverImage")
+        }
+
+        const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set:{
+                coverImage : coverImage.url
+            }
+        },
+        {new : true }
+    ).select("-password -refreshtoken")
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,user,"coverimage updated successfully"))
+
+    })
+
+export {
+    registerUser, 
+    loginUser,
+    logoutUser,
+    refreshAccessToken,
+    getCurrentuser, 
+    changeCurrentPassword,
+    updateAccountDetails,
+    updateUserAvatar,
+    updateuserCoverImage
+}
