@@ -51,6 +51,13 @@ app.use(express.static("public"))
 ham store krna chahte hai vo publicly using asset hai jokiham har jagh use kr payenge */
 app.use(cookieParser())
 
+// app.use((req, res, next) => {
+//   console.log("Middleware check:", req.method, req.url);
+//   next();
+// });
+//debug
+
+
 //routes
 
 import userRouter from "./routes/user.routes.js"

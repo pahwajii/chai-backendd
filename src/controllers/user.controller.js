@@ -2,25 +2,31 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import {ApiError} from "../utils/ApiError.js"
 import {User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
+import jwt from "jsonwebtoken"
+
 
 import { ApiResponse } from "../utils/ApiResponse.js";
 
-const generateAccessAndRefreshTokens = async(userId)=>{
+const generateAccessAndRefreshTokens = async (userId) => {
     try {
         const user = await User.findById(userId)
+
+        if (!user) {
+            throw new ApiError(404, "User not found")
+        }
+
         const accessToken = user.generateAccessToken()
         const refreshToken = user.generateRefreshToken()
-        
+
+        // save refresh token to user
         user.refreshToken = refreshToken
-        await user.save({ validateBeforeSave : false })
+        await user.save({ validateBeforeSave: false })
 
-        return {accessToken,refreshToken};
-
+        return { accessToken, refreshToken }
     } catch (error) {
-        throw new ApiError(500,"something went wrong with the refresh token and access token ")
+        throw new ApiError(500, "something went wrong with the refresh token and access token")
     }
 }
-
 
 // const registerUser = asyncHandler(async(req,res)=> {
 //     return res.status(200).json({
@@ -79,10 +85,10 @@ const registerUser = asyncHandler(async(req,res)=> {
 
     // req.body ke andar sara ka sara data aata hai 
     //as we have put middleware in routes thus it gives us more access in "req.things"so we get access to files //multer gives access of req.files
-    console.log("req.files:", req.files);
+    // console.log("req.files:", req.files);//debugging
     const avatarLocalPath = req.files?.avatar[0]?.path
     // this gives a check on avatar's first property of multer that is the path decided for files that is stored in diskstorage go refer to multer.middleware.js
-    console.log("avatarLocalPath:", avatarLocalPath);
+    // console.log("avatarLocalPath:", avatarLocalPath);////debugging
 
     // const coverImagePath = req.files?.coverImage[0]?.path;
     // kabhi kanhi likhne me glti ho jati hai js me whenw euse ? so we can use direct if else in place of advanced if else
@@ -136,12 +142,23 @@ const loginUser = asyncHandler(async(req,res)=>
     // password check 
     //access and refresh token 
     //send cookies
-    const { email, username, password } = req.body;
+
+    // console.log("Req.body:", req.body);
+    // console.log("Headers:", req.headers);
+// console.log("Body:", req.body);
+//debugging
+
+    // const { email, username, password } = req.body;
 
     // Require either username OR email, and password
-    if (!(username||email)) {
-        throw new ApiError(400, "Username/email and password are required");
+    // if (!(username||email)) {
+    //     throw new ApiError(400, "Username/email and password are required");
+    // }
+    const { email, username, password } = req.body || {}
+    if (!email && !username) {
+    throw new ApiError(400, "Email or username is required")
     }
+
 
     const user = await User.findOne({
         $or: [{ username }, { email }]
@@ -212,6 +229,71 @@ const logoutUser = asyncHandler(async(req,res)=>{
 
 })
 
+// here we are creating the accessToken refresh endpoint
+// this endpoint is used when the user's accessToken (short-lived) expires
+// instead of forcing the user to log in again, we validate their refreshToken (long-lived)
+// if the refreshToken is valid and matches the one stored in DB, we issue a new accessToken
+// 
+// 🔑 Access Token: 
+//   - Short-lived (e.g., 10m, 15m)
+//   - Sent with each request (usually in headers or cookies)
+//   - Proves the user's identity but expires quickly for security
+//
+// 🔑 Refresh Token: 
+//   - Long-lived (e.g., 7d, 30d)
+//   - Stored securely (usually as an httpOnly cookie)
+//   - Used ONLY to get new accessTokens when they expire
+//   - Cannot be used directly to access protected resources
+//
+// This approach provides both security (short expiry of access token) 
+// and good user experience (no need to log in again frequently).
+const refreshAccessToken = asyncHandler(async(req,res)=>{
+    try {
+        const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+    
+        if(!incomingRefreshToken){
+            throw new ApiError(401, "unauthorized request")
+        }
+    
+        const decodedToken = jwt.verify(
+            incomingRefreshToken,
+            process.env.REFRESH_TOKEN_SECRET
+        )
+    
+        const user = await User.findById(decodedToken?._id)
+    
+        if(!user){
+            throw new ApiError(401, "invalid refresh token")
+        }
+    
+        if(incomingRefreshToken != user?.refreshToken)  {
+            throw new ApiError(401, "refresh token is expired login again ")
+        }  
+    
+        const options= {
+            httpOnly: true ,
+            secure : true
+        }
+    
+        const {newaccessToken,newrefreshToken} = await generateAccessAndRefreshTokens(user._id)
+    
+        return res
+        .status(200)
+        .cookie("accessToken",newaccessToken,options)
+        .cookie("refreshToken",newrefreshToken,options)
+        .json(
+            new ApiResponse(
+                200,
+                {newaccessToken, refreshToken : newrefreshToken},
+                "access token refreshed"
+            )
+        )
+    } catch (error) {
+        throw new ApiError(401,"invalid refresh token")
+    }
+
+})
 
 
-export {registerUser, loginUser,logoutUser}
+
+export {registerUser, loginUser,logoutUser,refreshAccessToken}
