@@ -3,8 +3,6 @@ import {ApiError} from "../utils/ApiError.js"
 import {User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import jwt from "jsonwebtoken"
-
-
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { deleteFromCloudinary } from "../utils/deletefromcloudinary.js";
 
@@ -463,31 +461,39 @@ const getUserchannelprofile = asyncHandler(async (req,res)=>{
         },
         {// this is for calculating no. of subscribers
             $lookup:{
-                from : "Subscription",
+                // aesa kyun kia hamne ?? kyunki jab bhi mongodb me kuch save hoga to vo kese save hotahai ??? vo save hota hai all lowercase with a plural value 
+                // hamamra model tha "Subscription"=> subscriptions
+                from : "subscriptions",
                 localField: "_id",
                 foreignField: "channel",
                 as :"subscribers"
             }
         },
-        {
+        {// how many the user has subscribed to 
             $lookup:{
-                from : "Subscription",
+                from : "subscriptions",
                 localField: "_id",
                 foreignField: "channel",
                 as :"subscribedto"
             }
         },
         {
+            // by addfields we add the following fields to our usermodel
             $addFields:{
                 subscriberscount:{
-                    $size:"subscribers"
+                    $size:"$subscribers"
+                    // size helps us to calculate the count of what you want
+                    // first pipeline return us with the array of subscribers who are subscribed to that particular user
+                    // similarly for subscribed to 
                 },
                 channelsubscribedtoCount:{
-                    $size :"subscribedto"
+                    $size :"$subscribedto"
                 },
                 isSubscribed:{
-                    $cond:{//$in object or array dono me check krleta hai ki usme hai ya nhi 
-                        if:{$in :[req.user?._id,"$subscribers.subscriber"]},
+                    $cond:{
+                        //for conditioning we use cond
+                        //$in object /array dono me check krleta hai ki usme hai ya nhi 
+                        if:{$in :[req.user?._id,"$subscribers.subscriber"]},// yhn per hamne object ke andar jaake dekha hai 
                         then :true,
                         else:false
                     },
@@ -498,6 +504,7 @@ const getUserchannelprofile = asyncHandler(async (req,res)=>{
         },
         {
             $project:{
+                // selected cheezo ko project krne ke liye $project use krte hai
                 fullName:1,
                 username:1,
                 subscriberscount:1,
@@ -518,29 +525,30 @@ const getUserchannelprofile = asyncHandler(async (req,res)=>{
     .json(new ApiResponse(200,"USER channel fetched successfully"))
 })
 
-    // 1️⃣ Extract username from request params and validate
-// - Optional chaining (username?.trim()) ensures no error if username is null/undefined
-// - Throws 400 if username is missing or empty
+/*{
+1️⃣ Extract username from request params and validate
+- Optional chaining (username?.trim()) ensures no error if username is null/undefined
+- Throws 400 if username is missing or empty
 
-// 2️⃣ Aggregation pipeline on User collection
-// - $match: find user by username (case-insensitive)
-// - $lookup: join Subscription collection
-//    - subscribers: who subscribed to this channel
-//    - subscribedto: channels this user subscribed to
-// - $addFields: compute derived fields
-//    - subscriberscount: total subscribers
-//    - channelsubscribedtoCount: total channels user subscribed to
-//    - isSubscribed: check if current logged-in user is subscribed
-// - $project: select only required fields for response
+2️⃣ Aggregation pipeline on User collection
+- $match: find user by username (case-insensitive)
+- $lookup: join Subscription collection
+   - subscribers: who subscribed to this channel
+   - subscribedto: channels this user subscribed to
+- $addFields: compute derived fields
+   - subscriberscount: total subscribers
+   - channelsubscribedtoCount: total channels user subscribed to
+   - isSubscribed: check if current logged-in user is subscribed
+- $project: select only required fields for response
 
-// 3️⃣ Check if aggregation returned a user
-// - channel?.length uses optional chaining
-// - !channel?.length evaluates true if array is empty or null/undefined
-// - Throws 404 if no channel found
+3️⃣ Check if aggregation returned a user
+- channel?.length uses optional chaining
+- !channel?.length evaluates true if array is empty or null/undefined
+- Throws 404 if no channel found
 
-// 4️⃣ Send response
-// - Uses standardized ApiResponse for consistent API response format
-
+4️⃣ Send response
+- Uses standardized ApiResponse for consistent API response format
+}*/
 
 
 
