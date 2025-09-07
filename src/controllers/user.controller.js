@@ -446,6 +446,103 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, user, "Cover image updated successfully"))
 })
 
+const getUserchannelprofile = asyncHandler(async (req,res)=>{
+    const{username}= req.params
+
+    if(!username?.trim()){
+        throw new ApiError(400,"username is missing")
+    }
+
+    // User.findById({username})
+    //after aggregating the pipelines we get arrays as outputs 
+    const channel = await User.aggregate([
+        {
+            $match:{
+                username:username?.toLowerCase()
+            }
+        },
+        {// this is for calculating no. of subscribers
+            $lookup:{
+                from : "Subscription",
+                localField: "_id",
+                foreignField: "channel",
+                as :"subscribers"
+            }
+        },
+        {
+            $lookup:{
+                from : "Subscription",
+                localField: "_id",
+                foreignField: "channel",
+                as :"subscribedto"
+            }
+        },
+        {
+            $addFields:{
+                subscriberscount:{
+                    $size:"subscribers"
+                },
+                channelsubscribedtoCount:{
+                    $size :"subscribedto"
+                },
+                isSubscribed:{
+                    $cond:{//$in object or array dono me check krleta hai ki usme hai ya nhi 
+                        if:{$in :[req.user?._id,"$subscribers.subscriber"]},
+                        then :true,
+                        else:false
+                    },
+
+                },
+
+            }
+        },
+        {
+            $project:{
+                fullName:1,
+                username:1,
+                subscriberscount:1,
+                channelsubscribedtoCount:1,
+                isSubscribed:1,
+                avatar:1,
+                coverImage:1,
+                email:1,
+            }
+        }
+        
+    ])//pipeline aese likhi jaati hai
+    console.log(channel);
+    if(!channel?.length){
+        throw new ApiError(404,"channel does not exist")
+    }
+    return res.status(200)
+    .json(new ApiResponse(200,"USER channel fetched successfully"))
+})
+
+    // 1️⃣ Extract username from request params and validate
+// - Optional chaining (username?.trim()) ensures no error if username is null/undefined
+// - Throws 400 if username is missing or empty
+
+// 2️⃣ Aggregation pipeline on User collection
+// - $match: find user by username (case-insensitive)
+// - $lookup: join Subscription collection
+//    - subscribers: who subscribed to this channel
+//    - subscribedto: channels this user subscribed to
+// - $addFields: compute derived fields
+//    - subscriberscount: total subscribers
+//    - channelsubscribedtoCount: total channels user subscribed to
+//    - isSubscribed: check if current logged-in user is subscribed
+// - $project: select only required fields for response
+
+// 3️⃣ Check if aggregation returned a user
+// - channel?.length uses optional chaining
+// - !channel?.length evaluates true if array is empty or null/undefined
+// - Throws 404 if no channel found
+
+// 4️⃣ Send response
+// - Uses standardized ApiResponse for consistent API response format
+
+
+
 
 export {
     registerUser, 
@@ -456,5 +553,6 @@ export {
     changeCurrentPassword,
     updateAccountDetails,
     updateUserAvatar,
-    updateUserCoverImage
+    updateUserCoverImage,
+    getUserchannelprofile
 }
