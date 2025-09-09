@@ -550,6 +550,69 @@ const getUserchannelprofile = asyncHandler(async (req,res)=>{
 - Uses standardized ApiResponse for consistent API response format
 }*/
 
+const getWatchHistory= asyncHandler(async(req,res)=>{
+    const user = await User.aggregate([
+        {
+            $match:{
+                _id:new mongoose.Types.ObjectId
+            }
+        },
+        {
+            $lookup:{
+                from:"videos",
+                localField:"watchHistory",
+                foreignField:"_id",
+                as:"watchHistory",
+                pipeline:[
+                {
+                    $lookup:{
+                        from:"users",
+                        localField:"owner",
+                        foreignField:"_id",
+                        as:"owner",
+                        pipeline:[
+                            {
+                                $project:{
+                                    fullName:1,
+                                    username:1,
+                                    avatar:1,
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    $addFields:{
+                        owner:{
+                            $first:"$owner"
+                        }
+                    }
+                }
+            ]
+/**Here’s the full summary in simple terms:
+Why $first is used
+$lookup always returns an array.
+But each video can have only one owner.
+$first converts that single-element array into an object → makes API response cleaner.
+Without $first
+Frontend has to write video.owner[0].username.
+With $first, it’s just video.owner.username.
+Bad data case (multiple owners matched)
+$lookup could return multiple users (due to duplicates or corruption).
+$first ensures only the first one is picked, so your API response stays consistent with the "one owner" expectation. */ 
+            }
+        }
+    ])
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(
+            200,
+            user[0].watchHistory,
+            "watch History fetched Successfully"
+        )
+    )
+})
 
 
 export {
@@ -562,5 +625,6 @@ export {
     updateAccountDetails,
     updateUserAvatar,
     updateUserCoverImage,
-    getUserchannelprofile
+    getUserchannelprofile,
+    getWatchHistory
 }
