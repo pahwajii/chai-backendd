@@ -1,5 +1,18 @@
 import { Router } from "express";
-import { loginUser, logoutUser, refreshAccessToken, registerUser } from "../controllers/user.controller.js";
+import { 
+    changeCurrentPassword, 
+    getCurrentuser, 
+    getUserchannelprofile, 
+    getWatchHistory, 
+    loginUser, 
+    logoutUser, 
+    refreshAccessToken, 
+    registerUser, 
+    updateAccountDetails, 
+    updateUserAvatar, 
+    updateUserCoverImage 
+    }
+    from "../controllers/user.controller.js";
 import {upload} from "../middlewares/multer.middleware.js"
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -38,6 +51,67 @@ router.route("/logout").post(verifyJWT,
 // router.route("/login").post(loginUser)
 // //http://localhost:8000/api/v1/users => http://localhost:8000/api/v1/users/login
 
-router.route("/refresh-token").post(refreshAccessToken)
+router
+.route("/refresh-token")
+.post(refreshAccessToken)
+
+router
+.route("/change-password")
+.post(
+    verifyJWT,
+    changeCurrentPassword
+)
+
+router
+.route("/current-user")
+.get(
+    verifyJWT,
+    getCurrentuser
+)
+
+router
+.route("/update-acc-details")
+.patch(
+    verifyJWT, 
+    updateAccountDetails
+) 
+// Using PATCH instead of POST because we only want to update specific fields 
+// of the account, not overwrite all details at once.
+
+
+router
+.route("/update-avatar")
+.patch(
+    verifyJWT,
+    upload.single("avatar"),
+    updateUserAvatar
+)
+//first middleware we used verifyjwt so that we know user is logged in 
+//secondmiddleware we used upload the multer one middleware
+
+router
+.route("/update-cover")
+.patch(
+    verifyJWT,
+    upload.single("/coverimage"),
+    updateUserCoverImage
+)
+
+router
+.route("/c/:username")
+.get(
+    verifyJWT,
+    getUserchannelprofile
+)
+/*The route is /c/:username because:
+:username lets you dynamically fetch any user’s channel.
+/c/ prefix avoids conflicts with other routes and makes it clear the endpoint is about channels (inspired by YouTube’s style).
+*/
+
+router
+.route("/History")
+.get(verifyJWT,getWatchHistory)
+
+
 
 export default router
