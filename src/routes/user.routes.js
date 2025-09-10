@@ -93,7 +93,7 @@ router
 .route("/update-cover")
 .patch(
     verifyJWT,
-    upload.single("/coverimage"),
+    upload.single("coverImage"),
     updateUserCoverImage
 )
 

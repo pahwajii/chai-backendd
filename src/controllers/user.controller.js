@@ -5,7 +5,7 @@ import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import jwt from "jsonwebtoken"
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { deleteFromCloudinary } from "../utils/deletefromcloudinary.js";
-
+import mongoose from "mongoose";
 const generateAccessAndRefreshTokens = async (userId) => {
     try {
         const user = await User.findById(userId)
@@ -213,8 +213,10 @@ const logoutUser = asyncHandler(async(req,res)=>{
     await User.findByIdAndUpdate(
         req.user._id,
         {
-            $set:{
-                refreshToken: undefined
+            // $set:{
+            // refreshToken: undefined}
+            $unset:{
+                refreshToken: 1//this removes the fiels from document
             }
         },
         {
@@ -522,7 +524,7 @@ const getUserchannelprofile = asyncHandler(async (req,res)=>{
         throw new ApiError(404,"channel does not exist")
     }
     return res.status(200)
-    .json(new ApiResponse(200,"USER channel fetched successfully"))
+    .json(new ApiResponse(200,"USER channel fetched successfully", channel[0]))
 })
 
 /*{
@@ -550,69 +552,128 @@ const getUserchannelprofile = asyncHandler(async (req,res)=>{
 - Uses standardized ApiResponse for consistent API response format
 }*/
 
-const getWatchHistory= asyncHandler(async(req,res)=>{
-    const user = await User.aggregate([
-        {
-            $match:{
-                _id:new mongoose.Types.ObjectId
-            }
-        },
-        {
-            $lookup:{
-                from:"videos",
-                localField:"watchHistory",
-                foreignField:"_id",
-                as:"watchHistory",
-                pipeline:[
+// const getWatchHistory= asyncHandler(async(req,res)=>{
+//     const user = await User.aggregate([
+//         {
+//             $match:{
+//                 _id:new mongoose.Types.ObjectId
+//             }
+//         },
+//         {
+//             $lookup:{
+//                 from:"videos",
+//                 localField:"watchHistory",
+//                 foreignField:"_id",
+//                 as:"watchHistory",
+//                 pipeline:[
+//                 {
+//                     $lookup:{
+//                         from:"users",
+//                         localField:"owner",
+//                         foreignField:"_id",
+//                         as:"owner",
+//                         pipeline:[
+//                             {
+//                                 $project:{
+//                                     fullName:1,
+//                                     username:1,
+//                                     avatar:1,
+//                                 }
+//                             }
+//                         ]
+//                     }
+//                 },
+//                 {
+//                     $addFields:{
+//                         owner:{
+//                             $first:"$owner"
+//                         }
+//                     }
+//                 }
+//             ]
+// /**Here’s the full summary in simple terms:
+// Why $first is used
+// $lookup always returns an array.
+// But each video can have only one owner.
+// $first converts that single-element array into an object → makes API response cleaner.
+// Without $first
+// Frontend has to write video.owner[0].username.
+// With $first, it’s just video.owner.username.
+// Bad data case (multiple owners matched)
+// $lookup could return multiple users (due to duplicates or corruption).
+// $first ensures only the first one is picked, so your API response stays consistent with the "one owner" expectation. */ 
+//             }
+//         }
+//     ])
+//     return res
+//     .status(200)
+//     .json(
+//         new ApiResponse(
+//             200,
+//             user[0].watchHistory,
+//             "watch History fetched Successfully"
+//         )
+//     )
+// })
+const getWatchHistory = asyncHandler(async (req, res) => {
+  const userId = req.user?._id; // coming from auth middleware
+
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized: No user ID" });
+  }
+
+  const user = await User.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    {
+      $lookup: {
+        from: "videos",
+        localField: "watchHistory",
+        foreignField: "_id",
+        as: "watchHistory",
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              pipeline: [
                 {
-                    $lookup:{
-                        from:"users",
-                        localField:"owner",
-                        foreignField:"_id",
-                        as:"owner",
-                        pipeline:[
-                            {
-                                $project:{
-                                    fullName:1,
-                                    username:1,
-                                    avatar:1,
-                                }
-                            }
-                        ]
-                    }
+                  $project: {
+                    fullName: 1,
+                    username: 1,
+                    avatar: 1,
+                  },
                 },
-                {
-                    $addFields:{
-                        owner:{
-                            $first:"$owner"
-                        }
-                    }
-                }
-            ]
-/**Here’s the full summary in simple terms:
-Why $first is used
-$lookup always returns an array.
-But each video can have only one owner.
-$first converts that single-element array into an object → makes API response cleaner.
-Without $first
-Frontend has to write video.owner[0].username.
-With $first, it’s just video.owner.username.
-Bad data case (multiple owners matched)
-$lookup could return multiple users (due to duplicates or corruption).
-$first ensures only the first one is picked, so your API response stays consistent with the "one owner" expectation. */ 
-            }
-        }
-    ])
-    return res
-    .status(200)
-    .json(
-        new ApiResponse(
-            200,
-            user[0].watchHistory,
-            "watch History fetched Successfully"
-        )
+              ],
+            },
+          },
+          {
+            $addFields: {
+              owner: { $first: "$owner" },
+            },
+          },
+        ],
+      },
+    },
+  ]);
+
+  if (!user || user.length === 0) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      user[0].watchHistory || [],
+      "Watch history fetched successfully"
     )
-})
+  );
+});
 
 
 export {

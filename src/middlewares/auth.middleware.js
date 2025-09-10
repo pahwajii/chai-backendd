@@ -12,7 +12,7 @@ export const verifyJWT = asyncHandler(async(req,_,next)=>{
         }
      
         const decodedToken = jwt.verify(token , process.env.ACCESS_TOKEN_SECRET)// agar verify ho jayega to hame decoded info mil jayegi 
-    
+        
         const user = await User.findById(decodedToken._id)
         .select("-password -refreshToken")
         //hamne jwt.verify se decoded val mil gyi thii isliye hamne decoded._id se id nikal li

@@ -62,14 +62,21 @@ app.use(cookieParser())
 
 import userRouter from "./routes/user.routes.js"
 
+// Route declaration
+// Earlier we directly used app.get/post in app.js.
+// Now, for better structure, we separate concerns using routers, controllers, and middlewares.
 
-//routes declaration
-//firstly we were doing directly app.get and things ere gping good but now we have to bring middlewares and controller to get through the routes
-//Instead of defining routes directly in app.js, you import routers (like userRouter) from the routes folder.
-/*
-Each router handles a set of related routes and can use controllers for logic and middlewares for things like authentication.
-You mount the router with app.use("/api/v1/users", userRouter);, so all user-related routes are grouped under /api/v1/users.*/
-app.use("/api/v1/users",userRouter)
-//http://localhost:8000/api/v1/users => http://localhost:8000/api/v1/users/register
+// - Routers (like userRouter) group related routes together (e.g., all user-related APIs).
+// - Controllers contain the business logic for each route.
+// - Middlewares handle things like authentication, validation, etc.
+// This keeps app.js clean and makes the project scalable.
 
-export {app}
+// By mounting the router with:
+//   app.use("/api/v1/users", userRouter)
+// All routes inside userRouter will automatically be prefixed with /api/v1/users.
+// Example: "/register" in userRouter becomes accessible at
+//   http://localhost:8000/api/v1/users/register
+
+app.use("/api/v1/users", userRouter)
+
+export { app }
