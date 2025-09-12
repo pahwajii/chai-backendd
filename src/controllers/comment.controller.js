@@ -8,29 +8,37 @@ const getVideoComments = asyncHandler(async (req, res) => {
     const { videoId } = req.params;
     const { page = 1, limit = 10 } = req.query;
 
+    // Validate video ID
     if (!mongoose.Types.ObjectId.isValid(videoId)) {
         throw new ApiError(400, "Invalid video ID");
     }
 
+    // Build aggregation pipeline
     const pipeline = [
         {
+            // Match comments for the given video
             $match: {
                 video: new mongoose.Types.ObjectId(videoId)
             }
         },
         {
+            // Lookup comment owner details from users collection
             $lookup: {
                 from: "users",
                 localField: "owner",
                 foreignField: "_id",
                 as: "owner",
                 pipeline: [
-                    { $project: { username: 1, avatar: 1, fullName: 1 } }
+                    { $project: { username: 1, avatar: 1, fullName: 1 } } // only select needed fields
                 ]
             }
         },
-        { $unwind: "$owner" },
+        { 
+            // Flatten the owner array to a single object
+            $unwind: "$owner" 
+        },
         {
+            // Add convenient fields for frontend
             $addFields: {
                 ownerName: "$owner.username",
                 ownerAvatar: "$owner.avatar",
@@ -38,6 +46,7 @@ const getVideoComments = asyncHandler(async (req, res) => {
             }
         },
         {
+            // Project the final structure of each comment
             $project: {
                 content: 1,
                 video: 1,
@@ -50,24 +59,32 @@ const getVideoComments = asyncHandler(async (req, res) => {
                 createdAt: 1
             }
         },
-        { $sort: { createdAt: -1 } }
+        { 
+            // Sort comments by newest first
+            $sort: { createdAt: -1 } 
+        }
     ];
 
+    // Pagination options
     const options = {
         page: parseInt(page),
         limit: parseInt(limit)
     };
 
+    // Execute paginated aggregation
     const comments = await Comment.aggregatePaginate(Comment.aggregate(pipeline), options);
 
+    // If no comments found, return 404
     if (!comments.docs.length) {
         throw new ApiError(404, "No comments found for this video");
     }
 
+    // Send success response with paginated comments
     return res
         .status(200)
         .json(new ApiResponse(200, "Video comments fetched successfully", comments));
-});
+})
+
 
 
 const addComment = asyncHandler(async (req, res) => {

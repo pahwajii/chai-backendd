@@ -8,3 +8,220 @@ key to remember : ( wrap in try-catch )
 
 key to remember :  ( always remember the database is in another continent, so use async await)
 
+
+
+Project Backend Documentation
+1. Request Object (req)
+
+Property	Description
+
+req.params	URL parameters captured in route. Example: /video/:videoId → req.params.videoId
+
+req.query	Query string parameters. Example: /videos?page=1&limit=10 → req.query.page, req.query.limit
+
+req.body	Body of POST/PUT requests (parsed from JSON). Example: new video details, comment content
+
+req.user	The authenticated user object (added via JWT middleware). Example: req.user._id gives current user ID
+
+
+2. Response Object (res)
+Method	            Description
+
+res.status(code)	Sets HTTP status code for the response. Example: res.status(200)
+
+res.json(data)	    Sends JSON response to the client. Often wrapped with ApiResponse for consistent format
+
+res.send()	        Sends plain text or other formats
+
+3. Mongoose
+
+a. Models
+
+User, Video, Comment, Like, Subscription
+
+Represent MongoDB collections.
+
+Example usage: Video.findById(videoId)
+
+
+
+b. Methods
+Method	                        Description
+
+Model.findOne(filter)	        Find a single document matching filter
+
+Model.findById(id)	            Find a document by its _id
+
+Model.create(data)	            Create and save a new document
+
+Model.findByIdAndDelete(id)	    Delete a document by _id
+
+Model.countDocuments(filter)	Count documents matching filter
+
+Model.aggregate(pipeline)	    Run aggregation pipelines
+
+aggregatePaginate	            Paginated aggregation plugin
+
+
+c. Schema Types
+Type	                        Usage
+Schema.Types.ObjectId	        MongoDB ObjectId reference
+ref	                            Links field to another model for .populate()
+
+
+
+4. MongoDB Aggregation Operators
+Operator	                Description	Example
+$match	                    Filter documents	{ $match: { _id: ObjectId(videoId) } }
+$lookup	                    Join with another collection	{ $lookup: { from: "users", localField: "owner", foreignField: "_id", as: "owner" } }
+$unwind	                    Flatten an array field	{ $unwind: "$owner" }
+$addFields	                Add/modify fields	{ totalViews: { $sum: "$allVideos.views" } }
+$project	                Select output fields	{ title: 1, thumbnail: 1 }
+$sort	                    Sort documents	{ $sort: { createdAt: -1 } }
+$size	                    Array length	{ totalVideos: { $size: "$allVideos" } }
+$sum	                    Sum values	{ totalViews: { $sum: "$allVideos.views" } }
+$map	                    Transform array elements	{ $map: { input: "$allVideos", as: "v", in: "$$v.views" } }
+$ifNull	                    Replace null with default	{ $ifNull: ["$$v.likes", 0] }
+$ne	                        Not equal	{ video: { $ne: null } }
+$arrayElemAt	            Get array element at index	{ thumbnail: { $arrayElemAt: ["$allVideos.thumbnail", 0] } }
+
+
+
+5. Async Handler / Error Handling
+Utility	Purpose
+asyncHandler(fn)	    Wraps async functions for automatic error handling
+ApiError	            Custom error class with status code + message
+ApiResponse	            Custom success response wrapper (status, message, data)
+
+
+6. Likes / Toggle Pattern
+
+Steps to toggle a like:
+
+Validate target ID (mongoose.Types.ObjectId.isValid).
+
+Ensure target exists (Video.findById, Comment.findById, Tweet.findById).
+
+Check if Like document exists for this user + target.
+
+If exists → delete (unlike).
+
+If not → create (like).
+
+Count total likes using Like.countDocuments.
+
+Return response with message and total likes.
+
+7. Pagination
+
+Uses aggregatePaginate for comments/videos.
+
+Options example:
+
+const options = { page: 1, limit: 10 }
+
+
+Returns:
+
+{
+  docs: [...],       // results
+  totalDocs: 100,
+  limit: 10,
+  page: 1,
+  totalPages: 10
+}
+
+8. Common Patterns
+Pattern	Purpose
+req.params	                        URL param extraction (videoId, commentId)
+req.query	                        Query param extraction (page, limit)
+req.user._id	                    Current authenticated user
+new mongoose.Types.ObjectId(id)	    Convert string ID for aggregation
+.populate()	                        Replace ObjectId with full referenced document
+$arrayElemAt	                    Get first element of array
+
+
+9. Relationships Between Collections
+┌─────────┐           ┌─────────┐
+│  User   │           │  Video  │
+│---------│           │---------│
+│ _id     │◀──────────│ owner   │
+│ username│           │ title   │
+│ avatar  │           │ thumbnail
+└─────────┘           │ description
+                      │ views
+                      │ ...
+                      └─────────┘
+                          ▲
+                          │
+                          │
+                     ┌─────────┐
+                     │ Comment │
+                     │---------│
+                     │ _id     │
+                     │ content │
+                     │ video   │◀───────── Video._id
+                     │ owner   │◀───────── User._id
+                     └─────────┘
+                          ▲
+                          │
+                          │
+                     ┌─────────┐
+                     │  Like   │
+                     │---------│
+                     │ _id     │
+                     │ video   │◀───────── Video._id
+                     │ comment │◀───────── Comment._id
+                     │ tweet   │◀───────── Tweet._id
+                     │ likedBy │◀───────── User._id
+                     └─────────┘
+
+
+Notes:
+
+Video.owner → User._id
+
+Comment.video → Video._id
+
+Comment.owner → User._id
+
+Like.video/comment/tweet → references corresponding target
+
+Like.likedBy → User._id
+
+✅ This document now contains:
+
+All request/response objects used.
+
+Mongoose models and methods.
+
+MongoDB aggregation operators.
+
+Async error handling utilities.
+
+Likes toggle pattern.
+
+Pagination details.
+
+Common coding patterns.
+
+Full collection relationship diagram.
+
+
+
+
+Controller Functions Cheat Sheet
+
+
+
+Controller Function	                     HTTP Method	                       Endpoint	                        Input	                                Output / Response	                                                                    Description
+healthcheck	                             GET	                               /health	                        None	                                { status: "OK" }	                                                                    Checks if API is running
+getChannelStats	                         GET	                               /channel/:channelID/stats        channelID in URL params	                { totalVideos, totalViews, totalLikes, totalSubscribers, thumbnail, username, avatar }	Fetches channel statistics
+getChannelVideos	                     GET	                               /channel/:channelID/videos	    channelID in URL params	                Array of videos uploaded by channel	                                                    Lists all videos of a channel
+toggleVideoLike	                         POST	                               /video/:videoId/like	videoId     in URL params, req.user._id	            { totalLikes } + message	                                                            Toggles like/unlike on a video by the current user
+toggleCommentLike	                     POST	                               /comment/:commentId/like	        commentId in URL params, req.user._id	{ totalLikes } + message	                                                            Toggles like/unlike on a comment by the current user
+toggleTweetLike	                         POST	                               /tweet/:tweetId/like	            tweetId in URL params, req.user._id	    Message	Toggles like/unlike on a tweet by the current user
+getLikedVideos	                         GET	                               /user/liked-videos	            req.user._id	                        Array of liked videos with title, thumbnail, owner	                                    Returns all videos liked by the current user
+getVideoComments	                     GET	                               /video/:videoId/comments	        videoId in URL params, optional page    Paginated list of comments with content, owner, createdAt 	                            Fetches paginated comments for a video
+                                                                                                                and limit query params	                
+toggleVideoLike (duplicate)	             POST	                               /video/:videoId/like	            videoId in URL params	                { totalLikes } + message	Toggles video like (already covered above)

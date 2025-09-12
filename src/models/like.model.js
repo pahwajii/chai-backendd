@@ -24,4 +24,4 @@ const likeschema = new Schema(
     timestamps:true
 })
 
-export const Like = mongoose.mode("Like",likeschema)
+export const Like = mongoose.model("Like",likeschema)
