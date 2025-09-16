@@ -91,9 +91,7 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
 
 
 const toggleTweetLike = asyncHandler(async (req, res) => {
-    const {tweetId} = req.params
-    //TODO: toggle like on tweet
-    const toggleTweetLike = asyncHandler(async (req, res) => {
+
     const { tweetId } = req.params
 
     if (!mongoose.Types.ObjectId.isValid(tweetId)) {
@@ -125,10 +123,6 @@ const toggleTweetLike = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, message))
 })
 
-
-}
-)
-
 const getLikedVideos = asyncHandler(async (req, res) => {
     //TODO: get all liked videos
     
@@ -142,7 +136,7 @@ const getLikedVideos = asyncHandler(async (req, res) => {
     .populate({
         path: "video",
         select: "title thumbnail",
-         populate: {
+        populate: {
         path: "owner",
         select: "username fullName"
     }
