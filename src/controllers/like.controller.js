@@ -44,7 +44,6 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200,{totalLikes},message))
 })
 
-
 const toggleCommentLike = asyncHandler(async (req, res) => {
     const { commentId } = req.params
 
@@ -87,8 +86,6 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
         new ApiResponse(200, { totalLikes }, message)
     )
 })
-
-
 
 const toggleTweetLike = asyncHandler(async (req, res) => {
 

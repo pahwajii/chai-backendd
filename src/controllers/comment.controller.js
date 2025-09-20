@@ -85,8 +85,6 @@ const getVideoComments = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, "Video comments fetched successfully", comments));
 })
 
-
-
 const addComment = asyncHandler(async (req, res) => {
     // TODO: add a comment to a video
     const { videoId } = req.params;

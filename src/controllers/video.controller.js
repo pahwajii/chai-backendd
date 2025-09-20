@@ -7,7 +7,7 @@ import {asyncHandler} from "../utils/asyncHandler.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 
 
-export const getAllVideos = asyncHandler(async (req, res) => {
+const getAllVideos = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10, query, userId, sortBy = "createdAt", sortType = "desc" } = req.query;
 
     let match = {};
