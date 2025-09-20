@@ -115,16 +115,16 @@ const addComment = asyncHandler(async (req, res) => {
 const updateComment = asyncHandler(async (req, res) => {
     // TODO: update a comment
 /**
-Get the comment ID from the request.
-Validate that the ID is a proper MongoDB ObjectId.
-Fetch the comment from the database using that ID.
-If no comment is found → return an error (comment not found).
-Check if the logged-in user is the owner of the comment.
-If not the owner → return an error (not authorized).
-If yes → take the new content from the request body.
-Validate the new content (not empty, proper format).
-Update the comment’s content in the database.
-Return a success response with the updated comment.
+    Get the comment ID from the request.
+    Validate that the ID is a proper MongoDB ObjectId.
+    Fetch the comment from the database using that ID.
+    If no comment is found → return an error (comment not found).
+    Check if the logged-in user is the owner of the comment.
+    If not the owner → return an error (not authorized).
+    If yes → take the new content from the request body.
+    Validate the new content (not empty, proper format).
+    Update the comment’s content in the database.
+    Return a success response with the updated comment.
  */
     const {commentID} = req.params
 

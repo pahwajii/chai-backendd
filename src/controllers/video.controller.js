@@ -123,9 +123,6 @@ const publishAVideo = asyncHandler(async (req, res) => {
 });
 
 
-
-
-
 const getVideoById = asyncHandler(async (req, res) => {
     const { videoId } = req.params;
 
@@ -218,10 +215,6 @@ const updateVideo = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, updatedVideo, "Video updated successfully"));
 });
 
-
-
-
-
 const deleteVideo = asyncHandler(async (req, res) => {
     const { videoId } = req.params;
 
@@ -262,7 +255,6 @@ const deleteVideo = asyncHandler(async (req, res) => {
         .status(200)
         .json(new ApiResponse(200, {}, "Video deleted successfully"));
 });
-
 
 
 const togglePublishStatus = asyncHandler(async (req, res) => {

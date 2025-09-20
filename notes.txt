@@ -225,3 +225,39 @@ getLikedVideos	                         GET	                               /user
 getVideoComments	                     GET	                               /video/:videoId/comments	        videoId in URL params, optional page    Paginated list of comments with content, owner, createdAt 	                            Fetches paginated comments for a video
                                                                                                                 and limit query params	                
 toggleVideoLike (duplicate)	             POST	                               /video/:videoId/like	            videoId in URL params	                { totalLikes } + message	Toggles video like (already covered above)
+
+
+**Common HTTP Status Codes Cheat Sheet**
+✅ Success Codes (2xx)
+
+200 OK → Request succeeded, and the response body contains the result.
+
+201 Created → Resource successfully created (e.g., after POST).
+
+202 Accepted → Request accepted for processing, but not completed yet.
+
+204 No Content → Request succeeded, but no content to return (often used with DELETE).
+
+❌ Client Error Codes (4xx)
+
+400 Bad Request → The request is invalid (e.g., malformed JSON, invalid params).
+
+401 Unauthorized → Authentication required (e.g., missing/invalid token).
+
+403 Forbidden → Authenticated but not allowed to access this resource.
+
+404 Not Found → Requested resource doesn’t exist.
+
+409 Conflict → Request conflicts with current state (e.g., duplicate entry).
+
+422 Unprocessable Entity → Data is understood but invalid (e.g., validation error).
+
+🚨 Server Error Codes (5xx)
+
+500 Internal Server Error → Generic server-side error.
+
+502 Bad Gateway → Server acting as a gateway received an invalid response.
+
+503 Service Unavailable → Server temporarily unavailable (overload/maintenance).
+
+504 Gateway Timeout → Server acting as a gateway didn’t get a response in time.
