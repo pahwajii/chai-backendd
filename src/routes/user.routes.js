@@ -1,20 +1,21 @@
 import { Router } from "express";
-import { 
-    changeCurrentPassword, 
-    getCurrentuser, 
-    getUserchannelprofile, 
-    getWatchHistory, 
-    loginUser, 
-    logoutUser, 
-    refreshAccessToken, 
-    registerUser, 
-    updateAccountDetails, 
-    updateUserAvatar, 
-    updateUserCoverImage 
+import {
+    addToWatchHistory,
+    changeCurrentPassword,
+    getCurrentuser,
+    getUserchannelprofile,
+    getWatchHistory,
+    loginUser,
+    logoutUser,
+    refreshAccessToken,
+    registerUser,
+    updateAccountDetails,
+    updateUserAvatar,
+    updateUserCoverImage
     }
     from "../controllers/user.controller.js";
 import {upload} from "../middlewares/multer.middleware.js"
-import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { verifyJWT, optionalVerifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router()
 //add a middleware by just adding router.route("/your route").post(middleware,action)
@@ -100,13 +101,17 @@ router
 router
 .route("/c/:username")
 .get(
-    verifyJWT,
+    optionalVerifyJWT,
     getUserchannelprofile
 )
 /*The route is /c/:username because:
 :username lets you dynamically fetch any user’s channel.
 /c/ prefix avoids conflicts with other routes and makes it clear the endpoint is about channels (inspired by YouTube’s style).
 */
+
+router
+.route("/watch-history/:videoId")
+.post(verifyJWT, addToWatchHistory)
 
 router
 .route("/History")

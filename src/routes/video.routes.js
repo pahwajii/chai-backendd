@@ -1,20 +1,62 @@
-import mongoose from "mongoose"
-import {Video} from "../models/video.model.js"
-import {Subscription} from "../models/subscription.model.js"
-import {Like} from "../models/like.model.js"
-import {ApiError} from "../utils/ApiError.js"
-import {ApiResponse} from "../utils/ApiResponse.js"
-import {asyncHandler} from "../utils/asyncHandler.js"
+import { Router } from "express";
+import {
+    getAllVideos,
+    publishAVideo,
+    getVideoById,
+    updateVideo,
+    deleteVideo,
+    togglePublishStatus,
+    getVideoRecommendations,
+    getTrendingVideos,
+    getRelatedVideos
+} from "../controllers/video.controller.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { upload } from "../middlewares/multer.middleware.js";
 
-const getChannelStats = asyncHandler(async (req, res) => {
-    // TODO: Get the channel stats like total video views, total subscribers, total videos, total likes etc.
-})
+const router = Router();
 
-const getChannelVideos = asyncHandler(async (req, res) => {
-    // TODO: Get all the videos uploaded by the channel
-})
+// Get all videos with filtering and pagination
+router.route("/").get(getAllVideos);
 
-export {
-    getChannelStats, 
-    getChannelVideos
-    }
+// Get trending videos
+router.route("/trending").get(getTrendingVideos);
+
+// Publish a new video (protected route)
+router.route("/publish").post(
+    verifyJWT,
+    upload.fields([
+        {
+            name: "video",
+            maxCount: 1,
+        },
+        {
+            name: "thumbnail",
+            maxCount: 1,
+        }
+    ]),
+    publishAVideo
+);
+
+// Get video recommendations
+router.route("/recommendations/:videoId").get(getVideoRecommendations);
+
+// Get related videos
+router.route("/related/:videoId").get(getRelatedVideos);
+
+// Get video by ID (public route - no authentication required)
+router.route("/:videoId").get(getVideoById);
+
+// Update video (protected route)
+router.route("/:videoId").patch(
+    verifyJWT,
+    upload.single("thumbnail"),
+    updateVideo
+);
+
+// Delete video (protected route)
+router.route("/:videoId").delete(verifyJWT, deleteVideo);
+
+// Toggle publish status (protected route)
+router.route("/toggle/publish/:videoId").patch(verifyJWT, togglePublishStatus);
+
+export default router;

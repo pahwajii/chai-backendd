@@ -11,6 +11,6 @@ const healthcheck = asyncHandler(async (req, res) => {
 })
 
 export {
-    healthcheck
+    healthcheck as healthCheck
     }
     

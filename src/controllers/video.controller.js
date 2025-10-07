@@ -5,6 +5,7 @@ import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
+import {deleteFromCloudinary} from "../utils/deletefromcloudinary.js"
 
 
 const getAllVideos = asyncHandler(async (req, res) => {
@@ -54,6 +55,28 @@ const getAllVideos = asyncHandler(async (req, res) => {
         },
         { $unwind: "$owner" },                // convert array to object
         {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "video",
+                as: "likes"
+            }
+        },
+        {
+            $lookup: {
+                from: "dislikes",
+                localField: "_id",
+                foreignField: "video",
+                as: "dislikes"
+            }
+        },
+        {
+            $addFields: {
+                likesCount: { $size: "$likes" },
+                dislikesCount: { $size: "$dislikes" }
+            }
+        },
+        {
             $project: {                       // select fields to return
                 title: 1,
                 description: 1,
@@ -62,6 +85,8 @@ const getAllVideos = asyncHandler(async (req, res) => {
                 duration: 1,
                 isPublished: 1,
                 createdAt: 1,
+                likesCount: 1,
+                dislikesCount: 1,
                 "owner.username": 1,
                 "owner.fullName": 1,
                 "owner.avatar": 1
@@ -88,16 +113,39 @@ const publishAVideo = asyncHandler(async (req, res) => {
     // Get uploaded file paths
     const videoLocalPath = req.files?.video?.[0]?.path;
     const thumbnailLocalPath = req.files?.thumbnail?.[0]?.path;
+    const videoFileSize = req.files?.video?.[0]?.size;
+    const thumbnailFileSize = req.files?.thumbnail?.[0]?.size;
 
     if (!videoLocalPath || !thumbnailLocalPath) {
         throw new ApiError(400, "Video and thumbnail are required");
     }
 
+    // Check file sizes (100MB limit for video, 10MB for thumbnail)
+    const maxVideoSize = 100 * 1024 * 1024; // 100MB
+    const maxThumbnailSize = 10 * 1024 * 1024; // 10MB
+
+    if (videoFileSize > maxVideoSize) {
+        throw new ApiError(400, "Video file is too large. Maximum size is 100MB");
+    }
+
+    if (thumbnailFileSize > maxThumbnailSize) {
+        throw new ApiError(400, "Thumbnail file is too large. Maximum size is 10MB");
+    }
+
+    console.log(`Video file size: ${(videoFileSize / 1024 / 1024).toFixed(2)}MB`);
+    console.log(`Thumbnail file size: ${(thumbnailFileSize / 1024 / 1024).toFixed(2)}MB`);
+
     // Upload to Cloudinary
+    console.log('Starting video upload to Cloudinary...');
     const videoFile = await uploadOnCloudinary(videoLocalPath);
+    console.log('Video upload result:', videoFile ? 'Success' : 'Failed');
+    
+    console.log('Starting thumbnail upload to Cloudinary...');
     const thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
+    console.log('Thumbnail upload result:', thumbnail ? 'Success' : 'Failed');
 
     if (!videoFile || !thumbnail) {
+        console.error('Upload failed - Video:', !!videoFile, 'Thumbnail:', !!thumbnail);
         throw new ApiError(400, "Failed to upload video/thumbnail");
     }
 
@@ -117,6 +165,10 @@ const publishAVideo = asyncHandler(async (req, res) => {
         owner: req.user._id,                // logged-in user from auth middleware
     });
 
+    console.log('Video created successfully:', video);
+    console.log('Video owner:', video.owner);
+    console.log('Request user ID:', req.user._id);
+
     return res
         .status(201)
         .json(new ApiResponse(201, video, "Video published successfully"));
@@ -126,40 +178,116 @@ const publishAVideo = asyncHandler(async (req, res) => {
 const getVideoById = asyncHandler(async (req, res) => {
     const { videoId } = req.params;
 
+    console.log('getVideoById called with videoId:', videoId);
+
     // Validate videoId
     if (!mongoose.Types.ObjectId.isValid(videoId)) {
         throw new ApiError(400, "Invalid video ID");
     }
 
-    // Query video and populate owner info
-    const video = await Video.findById(videoId)
-        .populate("owner", "username avatar fullName")
-        .select("title description thumbnail views duration createdAt owner isPublished"); // added isPublished for improved check
+    // Query video with owner info, subscriber count, and like/dislike counts
+    const video = await Video.aggregate([
+        { $match: { _id: new mongoose.Types.ObjectId(videoId) } },
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        { $unwind: "$owner" },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "owner._id",
+                foreignField: "channel",
+                as: "subscribers"
+            }
+        },
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "video",
+                as: "likes"
+            }
+        },
+        {
+            $lookup: {
+                from: "dislikes",
+                localField: "_id",
+                foreignField: "video",
+                as: "dislikes"
+            }
+        },
+        {
+            $addFields: {
+                "owner.subscribersCount": { $size: "$subscribers" },
+                likesCount: { $size: "$likes" },
+                dislikesCount: { $size: "$dislikes" },
+                isLikedByUser: req.user ? {
+                    $in: [new mongoose.Types.ObjectId(req.user._id), "$likes.likedBy"]
+                } : false,
+                isDislikedByUser: req.user ? {
+                    $in: [new mongoose.Types.ObjectId(req.user._id), "$dislikes.dislikedBy"]
+                } : false
+            }
+        },
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                thumbnail: 1,
+                videoFile: 1,
+                views: 1,
+                duration: 1,
+                createdAt: 1,
+                isPublished: 1,
+                likesCount: 1,
+                dislikesCount: 1,
+                isLikedByUser: 1,
+                isDislikedByUser: 1,
+                owner: {
+                    _id: 1,
+                    username: 1,
+                    fullName: 1,
+                    avatar: 1,
+                    subscribersCount: 1
+                }
+            }
+        }
+    ]);
 
-    if (!video) {
+    const videoData = video[0];
+
+    console.log('Video found:', videoData ? videoData._id : 'null');
+    console.log('Video owner:', videoData?.owner);
+    console.log('Video owner username:', videoData?.owner?.username);
+
+    if (!videoData) {
         throw new ApiError(404, "Video doesn't exist");
     }
 
     // IMPROVEMENT: Check if video is unpublished and requester is not the owner
-    if (!video.isPublished && (!req.user || video.owner._id.toString() !== req.user._id.toString())) {
+    if (!videoData.isPublished && (!req.user || videoData.owner._id.toString() !== req.user._id.toString())) {
         throw new ApiError(403, "You are not allowed to view this video");
     }
 
-    // Increment views
-    video.views = video.views + 1;
-    await video.save();
+    // Increment views - need to update the actual document
+    await Video.findByIdAndUpdate(videoId, { $inc: { views: 1 } });
 
     // IMPROVEMENT: Add to watch history if user is logged in
     if (req.user) {
         await User.findByIdAndUpdate(req.user._id, {
-            $addToSet: { watchHistory: video._id }
+            $addToSet: { watchHistory: videoData._id }
         });
     }
 
     // Return response
     return res
         .status(200)
-        .json(new ApiResponse(200, video, "Video fetched successfully"));
+        .json(new ApiResponse(200, videoData, "Video fetched successfully"));
 });
 
 
@@ -297,11 +425,392 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
         );
 })
 
+const getVideoRecommendations = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+    const { limit = 10 } = req.query;
+
+    // Validate videoId
+    if (!mongoose.Types.ObjectId.isValid(videoId)) {
+        throw new ApiError(400, "Invalid video ID");
+    }
+
+    // Get the current video to understand its context
+    const currentVideo = await Video.findById(videoId)
+        .populate("owner", "username fullName avatar");
+
+    if (!currentVideo) {
+        throw new ApiError(404, "Video not found");
+    }
+
+    // Get user's watch history for personalized recommendations
+    let userWatchHistory = [];
+    if (req.user) {
+        const user = await User.findById(req.user._id).select("watchHistory");
+        userWatchHistory = user?.watchHistory || [];
+    }
+
+    // Build recommendation pipeline
+    const pipeline = [
+        // Match published videos only
+        { $match: { isPublished: true, _id: { $ne: new mongoose.Types.ObjectId(videoId) } } },
+        
+        // Lookup owner information
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        { $unwind: "$owner" },
+
+        // Add recommendation score based on multiple factors
+        {
+            $addFields: {
+                recommendationScore: {
+                    $add: [
+                        // Score based on views (popularity)
+                        { $multiply: [{ $log: [{ $add: ["$views", 1] }, 10] }, 0.3] },
+                        
+                        // Score based on recency (newer videos get higher score)
+                        { $multiply: [{ $divide: [{ $subtract: [new Date(), "$createdAt"] }, 86400000] }, -0.1] },
+                        
+                        // Score based on same channel (if user likes this channel)
+                        { $cond: [
+                            { $eq: ["$owner._id", currentVideo.owner._id] },
+                            2.0, // Higher score for same channel
+                            0
+                        ]},
+                        
+                        // Score based on user's watch history (if video is in history, lower score)
+                        { $cond: [
+                            { $in: ["$_id", userWatchHistory] },
+                            -1.0, // Lower score for already watched videos
+                            0
+                        ]},
+                        
+                        // Score based on similar titles (basic keyword matching)
+                        { $cond: [
+                            { $regexMatch: { 
+                                input: "$title", 
+                                regex: new RegExp(currentVideo.title.split(' ').slice(0, 3).join('|'), 'i') 
+                            }},
+                            1.5, // Higher score for similar titles
+                            0
+                        ]}
+                    ]
+                }
+            }
+        },
+
+        // Sort by recommendation score
+        { $sort: { recommendationScore: -1 } },
+
+        // Limit results
+        { $limit: parseInt(limit) },
+
+        // Lookup likes and dislikes
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "video",
+                as: "likes"
+            }
+        },
+        {
+            $lookup: {
+                from: "dislikes",
+                localField: "_id",
+                foreignField: "video",
+                as: "dislikes"
+            }
+        },
+        {
+            $addFields: {
+                likesCount: { $size: "$likes" },
+                dislikesCount: { $size: "$dislikes" }
+            }
+        },
+        // Project only necessary fields
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                thumbnail: 1,
+                duration: 1,
+                views: 1,
+                createdAt: 1,
+                likesCount: 1,
+                dislikesCount: 1,
+                "owner.username": 1,
+                "owner.fullName": 1,
+                "owner.avatar": 1
+            }
+        }
+    ];
+
+    const recommendations = await Video.aggregate(pipeline);
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, recommendations, "Recommendations fetched successfully"));
+});
+
+const getTrendingVideos = asyncHandler(async (req, res) => {
+    const { limit = 20, timeRange = "7d" } = req.query;
+
+    // Calculate date range
+    let startDate = new Date();
+    switch (timeRange) {
+        case "1d":
+            startDate.setDate(startDate.getDate() - 1);
+            break;
+        case "7d":
+            startDate.setDate(startDate.getDate() - 7);
+            break;
+        case "30d":
+            startDate.setDate(startDate.getDate() - 30);
+            break;
+        default:
+            startDate.setDate(startDate.getDate() - 7);
+    }
+
+    const pipeline = [
+        // Match published videos within time range
+        { 
+            $match: { 
+                isPublished: true,
+                createdAt: { $gte: startDate }
+            } 
+        },
+        
+        // Lookup owner information
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        { $unwind: "$owner" },
+
+        // Calculate trending score based on views and recency
+        {
+            $addFields: {
+                trendingScore: {
+                    $add: [
+                        // Views score (logarithmic to prevent viral videos from dominating)
+                        { $multiply: [{ $log: { $add: ["$views", 1] } }, 0.4] },
+                        
+                        // Recency score (newer videos get higher score)
+                        { $multiply: [{ $divide: [{ $subtract: [new Date(), "$createdAt"] }, 86400000] }, -0.2] },
+                        
+                        // Engagement score (if we had likes/comments, we'd include them here)
+                        { $multiply: ["$views", 0.001] }
+                    ]
+                }
+            }
+        },
+
+        // Sort by trending score
+        { $sort: { trendingScore: -1 } },
+
+        // Limit results
+        { $limit: parseInt(limit) },
+
+        // Lookup likes and dislikes
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "video",
+                as: "likes"
+            }
+        },
+        {
+            $lookup: {
+                from: "dislikes",
+                localField: "_id",
+                foreignField: "video",
+                as: "dislikes"
+            }
+        },
+        {
+            $addFields: {
+                likesCount: { $size: "$likes" },
+                dislikesCount: { $size: "$dislikes" }
+            }
+        },
+        // Project only necessary fields
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                thumbnail: 1,
+                duration: 1,
+                views: 1,
+                createdAt: 1,
+                trendingScore: 1,
+                likesCount: 1,
+                dislikesCount: 1,
+                "owner.username": 1,
+                "owner.fullName": 1,
+                "owner.avatar": 1
+            }
+        }
+    ];
+
+    const trendingVideos = await Video.aggregate(pipeline);
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, trendingVideos, "Trending videos fetched successfully"));
+});
+
+const getRelatedVideos = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+    const { limit = 10 } = req.query;
+
+    // Validate videoId
+    if (!mongoose.Types.ObjectId.isValid(videoId)) {
+        throw new ApiError(400, "Invalid video ID");
+    }
+
+    // Get the current video
+    const currentVideo = await Video.findById(videoId)
+        .populate("owner", "username fullName avatar");
+
+    if (!currentVideo) {
+        throw new ApiError(404, "Video not found");
+    }
+
+    // Extract keywords from title and description
+    const titleWords = currentVideo.title.toLowerCase().split(/\s+/).filter(word => word.length > 3);
+    const descriptionWords = currentVideo.description.toLowerCase().split(/\s+/).filter(word => word.length > 3);
+    const keywords = [...new Set([...titleWords, ...descriptionWords])];
+
+    const pipeline = [
+        // Match published videos (excluding current video)
+        { 
+            $match: { 
+                isPublished: true,
+                _id: { $ne: new mongoose.Types.ObjectId(videoId) }
+            } 
+        },
+        
+        // Lookup owner information
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        { $unwind: "$owner" },
+
+        // Add relevance score
+        {
+            $addFields: {
+                relevanceScore: {
+                    $add: [
+                        // Score for same channel
+                        { $cond: [
+                            { $eq: ["$owner._id", currentVideo.owner._id] },
+                            3.0, // High score for same channel
+                            0
+                        ]},
+                        
+                        // Score for keyword matches in title
+                        { $multiply: [
+                            { $size: { $setIntersection: [
+                                { $split: [{ $toLower: "$title" }, " "] },
+                                keywords
+                            ]}},
+                            1.5
+                        ]},
+                        
+                        // Score for keyword matches in description
+                        { $multiply: [
+                            { $size: { $setIntersection: [
+                                { $split: [{ $toLower: "$description" }, " "] },
+                                keywords
+                            ]}},
+                            0.5
+                        ]},
+                        
+                        // Score based on views (popularity)
+                        { $multiply: [{ $log: { $add: ["$views", 1] } }, 0.2] }
+                    ]
+                }
+            }
+        },
+
+        // Sort by relevance score
+        { $sort: { relevanceScore: -1 } },
+
+        // Limit results
+        { $limit: parseInt(limit) },
+
+        // Lookup likes and dislikes
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "video",
+                as: "likes"
+            }
+        },
+        {
+            $lookup: {
+                from: "dislikes",
+                localField: "_id",
+                foreignField: "video",
+                as: "dislikes"
+            }
+        },
+        {
+            $addFields: {
+                likesCount: { $size: "$likes" },
+                dislikesCount: { $size: "$dislikes" }
+            }
+        },
+        // Project only necessary fields
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                thumbnail: 1,
+                duration: 1,
+                views: 1,
+                createdAt: 1,
+                likesCount: 1,
+                dislikesCount: 1,
+                "owner.username": 1,
+                "owner.fullName": 1,
+                "owner.avatar": 1
+            }
+        }
+    ];
+
+    const relatedVideos = await Video.aggregate(pipeline);
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, relatedVideos, "Related videos fetched successfully"));
+});
+
 export {
     getAllVideos,
     publishAVideo,
     getVideoById,
     updateVideo,
     deleteVideo,
-    togglePublishStatus
+    togglePublishStatus,
+    getVideoRecommendations,
+    getTrendingVideos,
+    getRelatedVideos
 }

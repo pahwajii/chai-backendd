@@ -3,7 +3,7 @@ import {Playlist} from "../models/playlist.model.js"
 import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
-import { use } from "react"
+
 import { Video } from "../models/video.model.js"
 
 
@@ -40,11 +40,51 @@ const getUserPlaylists = asyncHandler(async (req, res) => {
         throw new ApiError(400 , "invalid user")
     }
 
-    // Fetch playlists for the given user, sorted newest first, and populate owner details
-    const playlists = await Playlist.find({ owner: userId })
-        .sort({ createdAt: -1 })
-        .populate("owner", "name email"); // correctly populate owner fields
-
+    // Fetch playlists for the given user, sorted newest first, and populate owner details and first video's thumbnail
+    const playlists = await Playlist.aggregate([
+        { $match: { owner: new mongoose.Types.ObjectId(userId) } },
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        { $unwind: "$owner" },
+        {
+            $lookup: {
+                from: "videos",
+                localField: "videos",
+                foreignField: "_id",
+                as: "videos"
+            }
+        },
+        {
+            $addFields: {
+                videos: { $slice: ["$videos", 1] } // Get only first video for thumbnail
+            }
+        },
+        {
+            $project: {
+                name: 1,
+                description: 1,
+                isPublic: 1,
+                createdAt: 1,
+                videos: {
+                    _id: 1,
+                    thumbnail: 1
+                },
+                owner: {
+                    _id: 1,
+                    username: 1,
+                    fullName: 1,
+                    avatar: 1
+                }
+            }
+        },
+        { $sort: { createdAt: -1 } }
+    ]);
 
     return res
     .status(200)
@@ -59,13 +99,22 @@ const getPlaylistById = asyncHandler(async (req, res) => {
         throw new ApiError(400,"invalid playlistId")
     }
 
-    const playlist = await Playlist.findById(playlistId)
-    .populate("owner","name email")
-    .populate({
-        path:"videos",
-        select:"title description duration createdAt owner",
-        populate:{path:"owner",select:"name email"}
-    })
+
+            const { getSubscribersCount } = await import("../utils/subscribersCount.js");
+            let playlist = await Playlist.findById(playlistId)
+                .populate("owner", "fullName username avatar")
+                .populate({
+                    path: "videos",
+                    select: "title description duration createdAt owner thumbnail views",
+                    populate: { path: "owner", select: "username fullName avatar" }
+                });
+
+            if (playlist && playlist.owner && playlist.owner._id) {
+                // Attach subscribersCount dynamically
+                const count = await getSubscribersCount(playlist.owner._id);
+                playlist = playlist.toObject();
+                playlist.owner.subscribersCount = count;
+            }
 
     if(!playlist){
         throw new ApiError(400,"playlist doesnt exist")
@@ -133,8 +182,8 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
     .populate("owner", "name email") // populate owner info
     .populate({
         path: "videos",
-        select: "title description duration owner",
-        populate: { path: "owner", select: "name email" }
+        select: "title description duration owner thumbnail views",
+        populate: { path: "owner", select: "username fullName avatar" }
     })
 
     // Step 6: Return response
@@ -179,8 +228,8 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
     .populate("owner", "name email")
     .populate({
         path: "videos",
-        select: "title description duration owner",
-        populate: { path: "owner", select: "name email" }
+        select: "title description duration owner thumbnail views",
+        populate: { path: "owner", select: "username fullName avatar" }
     })
 
     // Step 6: Return response
@@ -258,8 +307,8 @@ const updatePlaylist = asyncHandler(async (req, res) => {
     .populate("owner", "name email")
     .populate({
         path: "videos",
-        select: "title description duration owner",
-        populate: { path: "owner", select: "name email" }
+        select: "title description duration owner thumbnail views",
+        populate: { path: "owner", select: "username fullName avatar" }
     })
 
     // Step 6: Return response

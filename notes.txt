@@ -261,3 +261,25 @@ toggleVideoLike (duplicate)	             POST	                               /vi
 503 Service Unavailable → Server temporarily unavailable (overload/maintenance).
 
 504 Gateway Timeout → Server acting as a gateway didn’t get a response in time.
+
+Find which process is using port 8000
+netstat -ano | findstr :8000
+
+
+You’ll see something like:
+
+TCP    0.0.0.0:8000    0.0.0.0:0    LISTENING    12345
+
+
+👉 The last column (12345 in this example) is the PID.
+
+2. Kill that process by PID
+taskkill /PID <pid> /F
+
+
+Example (if PID = 12345):
+
+taskkill /PID 12345 /F
+
+3. Restart your Node.js server
+npm start

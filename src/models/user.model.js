@@ -28,12 +28,10 @@ const userSchema = new Schema(
         },
         avatar: {
             url: {
-                type: String,
-                required: true
+                type: String
             },
             publicId: {
-                type: String,
-                required: true
+                type: String
             }
         },
         coverImage: {

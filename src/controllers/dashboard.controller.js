@@ -92,13 +92,12 @@ const getChannelVideos = asyncHandler(async (req, res) => {
     .populate("owner","username avatar")
     .select("title description thumbnail views likes createdAt")
 
-    if(!videos.length){
-        throw new ApiError(404,"No videos found for this channel")
-    }
+    console.log(`Found ${videos.length} videos for channel ${channelID}`);
+    console.log('Videos:', videos);
 
     return res 
     .status(200)
-    .json(new ApiResponse(200,"channel videosfetched successfully",videos))
+    .json(new ApiResponse(200, videos, "channel videos fetched successfully"))
 
 })
 
