@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { getCurrentUser } from '../store/slices/authSlice';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const Playlists = () => {
   const dispatch = useDispatch();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
@@ -38,7 +39,7 @@ const Playlists = () => {
   const fetchPlaylists = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8000/api/v1/playlists/user/${user?._id}`, {
+      const response = await fetch(`${API_BASE_URL}/playlists/user/${user?._id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -64,7 +65,7 @@ const Playlists = () => {
   const handleSubmitPlaylist = async (e) => {
     e.preventDefault();
     try {
-      const url = editingPlaylist ? `http://localhost:8000/api/v1/playlists/${editingPlaylist._id}` : 'http://localhost:8000/api/v1/playlists';
+      const url = editingPlaylist ? `${API_BASE_URL}/playlists/${editingPlaylist._id}` : `${API_BASE_URL}/playlists`;
       const method = editingPlaylist ? 'PUT' : 'POST';
       const response = await fetch(url, {
         method,
@@ -95,7 +96,7 @@ const Playlists = () => {
   const handleDeletePlaylist = async (playlistId) => {
     if (window.confirm('Are you sure you want to delete this playlist?')) {
       try {
-        const response = await fetch(`http://localhost:8000/api/v1/playlists/${playlistId}`, {
+        const response = await fetch(`${API_BASE_URL}/playlists/${playlistId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { fetchUserPlaylists } from '../store/slices/playlistSlice';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const PlaylistDetail = () => {
   const { playlistId } = useParams();
   const navigate = useNavigate();
@@ -39,7 +40,7 @@ const PlaylistDetail = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('accessToken');
-      const response = await fetch(`http://localhost:8000/api/v1/playlists/${playlistId}`, {
+      const response = await fetch(`${API_BASE_URL}/playlists/${playlistId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -63,7 +64,7 @@ const PlaylistDetail = () => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await fetch(`http://localhost:8000/api/v1/playlists/${playlistId}`, {
+      const response = await fetch(`${API_BASE_URL}/playlists/${playlistId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -88,7 +89,7 @@ const PlaylistDetail = () => {
     if (window.confirm('Are you sure you want to remove this video from the playlist?')) {
       try {
         const token = localStorage.getItem('accessToken');
-        const response = await fetch(`http://localhost:8000/api/v1/playlists/${playlistId}/video/${videoId}`, {
+        const response = await fetch(`${API_BASE_URL}/playlists/${playlistId}/video/${videoId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`,

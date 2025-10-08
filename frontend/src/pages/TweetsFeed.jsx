@@ -11,6 +11,7 @@ import {
   Plus,
   Send
 } from 'lucide-react';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const TweetsFeed = () => {
   const dispatch = useDispatch();
@@ -31,7 +32,7 @@ const TweetsFeed = () => {
     try {
       setLoading(true);
       const response = await fetch(
-        `http://localhost:8000/api/v1/tweets/all?page=${currentPage}&limit=20`
+        `${API_BASE_URL}/tweets/all?page=${currentPage}&limit=20`
       );
 
       if (response.ok) {

@@ -25,6 +25,7 @@ import { getCurrentUser, updateAccountDetails, updateUserAvatar, changeCurrentPa
 import { fetchVideos } from '../store/slices/videoSlice';
 import { fetchTweets } from '../store/slices/tweetSlice';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const Profile = () => {
   const { username } = useParams();
   const dispatch = useDispatch();
@@ -75,7 +76,7 @@ const Profile = () => {
           setIsOwnProfile(false);
           // Fetch other user's profile data
           try {
-            const response = await fetch(`http://localhost:8000/api/v1/users/c/${username}`);
+            const response = await fetch(`${API_BASE_URL}/users/c/${username}`);
             if (response.ok) {
               const data = await response.json();
               setProfileUser(data.data);
@@ -122,7 +123,7 @@ const Profile = () => {
   const fetchSubscriptions = async () => {
     try {
       // Fetch subscribers
-      const subscribersResponse = await fetch(`http://localhost:8000/api/v1/subscriptions/channel/${user?._id}`, {
+      const subscribersResponse = await fetch(`${API_BASE_URL}/subscriptions/channel/${user?._id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -133,7 +134,7 @@ const Profile = () => {
       }
 
       // Fetch subscribed channels
-      const subscribedResponse = await fetch(`http://localhost:8000/api/v1/subscriptions/subscriber/${user?._id}`, {
+      const subscribedResponse = await fetch(`${API_BASE_URL}/subscriptions/subscriber/${user?._id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -149,7 +150,7 @@ const Profile = () => {
 
   const fetchChannelStats = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/dashboard/stats/${user?._id}`, {
+      const response = await fetch(`${API_BASE_URL}/dashboard/stats/${user?._id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },

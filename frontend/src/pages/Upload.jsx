@@ -10,6 +10,7 @@ import {
   FileVideo,
   ImageIcon
 } from 'lucide-react';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const Upload = () => {
   const navigate = useNavigate();
@@ -124,7 +125,7 @@ const Upload = () => {
         return;
       }
 
-      const response = await fetch('http://localhost:8000/api/v1/videos/publish', {
+      const response = await fetch(`${API_BASE_URL}/videos/publish`, {
         method: 'POST',
         body: formData,
         headers: {

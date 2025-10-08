@@ -16,6 +16,7 @@ import {
   Plus,
   Trash2
 } from 'lucide-react';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const Channel = () => {
   const { username } = useParams();
@@ -47,7 +48,7 @@ const Channel = () => {
       const token = localStorage.getItem('accessToken');
 
       // Fetch channel info - using correct endpoint
-      const channelResponse = await fetch(`http://localhost:8000/api/v1/users/c/${username}`, {
+      const channelResponse = await fetch(`${API_BASE_URL}/users/c/${username}`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       if (channelResponse.ok) {
@@ -61,7 +62,7 @@ const Channel = () => {
         }
 
         // Now fetch videos using the channel ID from the response
-        const videosResponse = await fetch(`http://localhost:8000/api/v1/dashboard/videos/${channelData.data._id}`, {
+        const videosResponse = await fetch(`${API_BASE_URL}/dashboard/videos/${channelData.data._id}`, {
           headers: token ? { 'Authorization': `Bearer ${token}` } : {}
         });
         if (videosResponse.ok) {
@@ -71,7 +72,7 @@ const Channel = () => {
         }
 
         // Fetch playlists - using correct endpoint with user ID
-        const playlistsResponse = await fetch(`http://localhost:8000/api/v1/playlists/user/${channelData.data._id}`);
+        const playlistsResponse = await fetch(`${API_BASE_URL}/playlists/user/${channelData.data._id}`);
         if (playlistsResponse.ok) {
           const playlistsData = await playlistsResponse.json();
           console.log('Playlists data received:', playlistsData);
@@ -79,7 +80,7 @@ const Channel = () => {
         }
 
         // Fetch subscribed channels - using correct endpoint
-        const subscribedResponse = await fetch(`http://localhost:8000/api/v1/subscriptions/subscriber/${channelData.data._id}`);
+        const subscribedResponse = await fetch(`${API_BASE_URL}/subscriptions/subscriber/${channelData.data._id}`);
         if (subscribedResponse.ok) {
           const subscribedData = await subscribedResponse.json();
           console.log('Subscribed channels data received:', subscribedData);
@@ -88,7 +89,7 @@ const Channel = () => {
       }
 
       // Fetch tweets - using correct endpoint
-      const tweetsResponse = await fetch(`http://localhost:8000/api/v1/tweets/user/${username}`);
+      const tweetsResponse = await fetch(`${API_BASE_URL}/tweets/user/${username}`);
       if (tweetsResponse.ok) {
         const tweetsData = await tweetsResponse.json();
         console.log('Tweets data received:', tweetsData);
@@ -113,7 +114,7 @@ const Channel = () => {
 
       console.log('Toggling subscription for channel:', channel?._id);
 
-      const response = await fetch(`http://localhost:8000/api/v1/subscriptions/toggle/${channel?._id}`, {
+      const response = await fetch(`${API_BASE_URL}/subscriptions/toggle/${channel?._id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -153,7 +154,7 @@ const Channel = () => {
         return;
       }
 
-      const response = await fetch(`http://localhost:8000/api/v1/videos/${videoId}`, {
+      const response = await fetch(`${API_BASE_URL}/videos/${videoId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

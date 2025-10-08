@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { getCurrentUser } from '../store/slices/authSlice';
 import { History as HistoryIcon, Play, Eye, Clock, Trash2, Filter, SortAsc } from 'lucide-react';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const History = () => {
   const dispatch = useDispatch();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
@@ -22,7 +23,7 @@ const History = () => {
     try {
       setLoading(true);
       console.log('Fetching watch history...');
-      const response = await fetch('http://localhost:8000/api/v1/users/History', {
+      const response = await fetch(`${API_BASE_URL}/users/History`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },

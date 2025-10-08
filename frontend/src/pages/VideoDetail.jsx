@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { fetchUserPlaylists, addVideoToPlaylist } from '../store/slices/playlistSlice';
 import CommentSection from '../components/Comments/CommentSection';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const VideoDetail = () => {
   const { videoId } = useParams();
@@ -59,7 +60,7 @@ const VideoDetail = () => {
 
   const fetchVideoDetails = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/videos/${videoId}`);
+      const response = await fetch(`${API_BASE_URL}/videos/${videoId}`);
       if (response.ok) {
         const data = await response.json();
         // Video data loaded successfully
@@ -98,7 +99,7 @@ const VideoDetail = () => {
 
       // Check if user is subscribed to this channel
       // We can use the getSubscribedChannels API to check
-      const response = await fetch(`http://localhost:8000/api/v1/subscriptions/subscriber/${user._id}`, {
+      const response = await fetch(`${API_BASE_URL}/subscriptions/subscriber/${user._id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -126,7 +127,7 @@ const VideoDetail = () => {
 
   const fetchRecommendations = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/videos/recommendations/${videoId}`);
+      const response = await fetch(`${API_BASE_URL}/videos/recommendations/${videoId}`);
       if (response.ok) {
         const data = await response.json();
         setRecommendations(data.data);
@@ -148,7 +149,7 @@ const VideoDetail = () => {
       }
 
       console.log('Adding video to watch history:', videoId, 'for user:', userId);
-      const response = await fetch(`http://localhost:8000/api/v1/users/watch-history/${videoId}`, {
+      const response = await fetch(`${API_BASE_URL}/users/watch-history/${videoId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -211,7 +212,7 @@ const VideoDetail = () => {
 
       console.log('Toggling like for video:', videoId, 'current isLiked:', isLiked);
 
-      const response = await fetch(`http://localhost:8000/api/v1/likes/toggle/v/${videoId}`, {
+      const response = await fetch(`${API_BASE_URL}/likes/toggle/v/${videoId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -257,7 +258,7 @@ const VideoDetail = () => {
 
       console.log('Toggling dislike for video:', videoId, 'current isDisliked:', isDisliked);
 
-      const response = await fetch(`http://localhost:8000/api/v1/dislikes/toggle/v/${videoId}`, {
+      const response = await fetch(`${API_BASE_URL}/dislikes/toggle/v/${videoId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -361,7 +362,7 @@ const VideoDetail = () => {
       console.log('Toggling subscription for channel:', channelId, 'current isSubscribed:', isSubscribed);
       console.log('Channel ID type:', typeof channelId, 'value:', channelId);
 
-      const response = await fetch(`http://localhost:8000/api/v1/subscriptions/toggle/${channelId}`, {
+      const response = await fetch(`${API_BASE_URL}/subscriptions/toggle/${channelId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -403,7 +404,7 @@ const VideoDetail = () => {
         return;
       }
 
-      const response = await fetch(`http://localhost:8000/api/v1/videos/${videoId}`, {
+      const response = await fetch(`${API_BASE_URL}/videos/${videoId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
