@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams, Link } from 'react-router-dom';
 import { fetchVideos } from '../store/slices/videoSlice';
-import { Play, Eye, Clock } from 'lucide-react';
+import { Play, Eye, Clock, SearchIcon } from 'lucide-react';
 
 const Search = () => {
   const dispatch = useDispatch();
