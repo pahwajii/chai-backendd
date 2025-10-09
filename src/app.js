@@ -15,8 +15,9 @@ app.use(cors({
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
         const normalizedOrigin = origin.replace(/\/$/, ''); // remove trailing slash
-        // Allow Vercel deployments
+        // Allow Vercel deployments and localhost for development
         if (normalizedOrigin.endsWith('.vercel.app') ||
+            normalizedOrigin.startsWith('http://localhost:') ||
             allowedOrigins.includes(normalizedOrigin) ||
             allowedOrigins.includes('*')) {
             return callback(null, true);
