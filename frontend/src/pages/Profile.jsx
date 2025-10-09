@@ -353,9 +353,11 @@ const Profile = () => {
             </div>
 
             {/* Bio */}
-            <p className="text-gray-300 mb-4">
-              {profileUser?.bio || "No bio available"}
-            </p>
+            {profileUser?.bio && (
+              <p className="text-gray-300 mb-4">
+                {profileUser.bio}
+              </p>
+            )}
 
             {/* Action Buttons */}
             <div className="flex items-center space-x-4">
