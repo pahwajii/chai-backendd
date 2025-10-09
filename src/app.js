@@ -6,10 +6,12 @@ import cookieParser from "cookie-parser"
 const app = express()
 
 // app.use(cors())//configuration for cors there are many other options to be known about cors read documentation
-//procuction level\\
+//production level\\
 app.use(cors({
-    origin : process.env.CORS_ORIGIN,
-    credentials : true,
+    origin: function (origin, callback) {
+        callback(null, true);
+    },
+    credentials: true,
 }))
 
 
