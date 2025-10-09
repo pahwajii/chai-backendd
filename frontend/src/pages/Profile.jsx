@@ -120,9 +120,10 @@ const Profile = () => {
   }, [user]);
 
   const fetchSubscriptions = async () => {
+    if (!user?._id) return;
     try {
       // Fetch subscribed channels
-      const subscribedResponse = await fetch(`${API_BASE_URL}/subscriptions/subscriber/${user?._id}`, {
+      const subscribedResponse = await fetch(`${API_BASE_URL}/subscriptions/subscriber/${user._id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -137,8 +138,9 @@ const Profile = () => {
   };
 
   const fetchChannelStats = async () => {
+    if (!user?._id) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/dashboard/stats/${user?._id}`, {
+      const response = await fetch(`${API_BASE_URL}/dashboard/stats/${user._id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -162,12 +164,13 @@ const Profile = () => {
   };
 
   const formatViews = (views) => {
-    if (views >= 1000000) {
-      return `${(views / 1000000).toFixed(1)}M`;
-    } else if (views >= 1000) {
-      return `${(views / 1000).toFixed(1)}K`;
+    const numViews = Number(views) || 0;
+    if (numViews >= 1000000) {
+      return `${(numViews / 1000000).toFixed(1)}M`;
+    } else if (numViews >= 1000) {
+      return `${(numViews / 1000).toFixed(1)}K`;
     }
-    return views.toString();
+    return numViews.toString();
   };
 
   const formatDuration = (seconds) => {
