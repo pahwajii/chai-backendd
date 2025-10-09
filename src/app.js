@@ -8,8 +8,20 @@ const app = express()
 // app.use(cors())//configuration for cors there are many other options to be known about cors read documentation
 //procuction level\\
 app.use(cors({
-    origin : process.env.CORS_ORIGIN,
-    credentials : true,
+    origin: function (origin, callback) {
+        const allowedOrigins = [
+            process.env.CORS_ORIGIN?.replace(/\/$/, ''), // remove trailing slash
+            'https://chai-backendd-git-main-lakshaypahwa47-3066s-projects.vercel.app'
+        ].filter(Boolean);
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        const normalizedOrigin = origin.replace(/\/$/, ''); // remove trailing slash
+        if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes('*')) {
+            return callback(null, true);
+        }
+        return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
 }))
 
 app.use(express.json({limit: "16kb"}))
