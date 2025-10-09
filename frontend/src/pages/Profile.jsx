@@ -36,7 +36,6 @@ const Profile = () => {
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [profileUser, setProfileUser] = useState(null);
   const [userId, setUserId] = useState(null);
-  const [subscribers, setSubscribers] = useState([]);
   const [subscribedChannels, setSubscribedChannels] = useState([]);
   const [channelStats, setChannelStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -122,17 +121,6 @@ const Profile = () => {
 
   const fetchSubscriptions = async () => {
     try {
-      // Fetch subscribers
-      const subscribersResponse = await fetch(`${API_BASE_URL}/subscriptions/channel/${user?._id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-      });
-      if (subscribersResponse.ok) {
-        const subscribersData = await subscribersResponse.json();
-        setSubscribers(subscribersData.data || []);
-      }
-
       // Fetch subscribed channels
       const subscribedResponse = await fetch(`${API_BASE_URL}/subscriptions/subscriber/${user?._id}`, {
         headers: {
@@ -609,37 +597,7 @@ const Profile = () => {
 
       {/* Subscriptions Section */}
       {isOwnProfile && (
-        <div className="mt-12 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Subscribers */}
-          <div className="bg-dark-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
-              <Users className="w-5 h-5" />
-              <span>Subscribers ({subscribers.length})</span>
-            </h3>
-            {subscribers.length === 0 ? (
-              <p className="text-gray-400">No subscribers yet</p>
-            ) : (
-              <div className="space-y-3">
-                {subscribers.slice(0, 5).map((subscriber) => (
-                  <div key={subscriber._id} className="flex items-center space-x-3">
-                    <img
-                      src={subscriber.subscriber?.avatar?.url || '/default-avatar.png'}
-                      alt={subscriber.subscriber?.fullName}
-                      className="w-8 h-8 rounded-full"
-                    />
-                    <div>
-                      <p className="text-white font-medium">{subscriber.subscriber?.fullName}</p>
-                      <p className="text-sm text-gray-400">@{subscriber.subscriber?.username}</p>
-                    </div>
-                  </div>
-                ))}
-                {subscribers.length > 5 && (
-                  <p className="text-sm text-gray-400">And {subscribers.length - 5} more...</p>
-                )}
-              </div>
-            )}
-          </div>
-
+        <div className="mt-12">
           {/* Subscribed Channels */}
           <div className="bg-dark-800 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
