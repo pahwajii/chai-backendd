@@ -1,6 +1,6 @@
 # Database Configuration
 PORT = 8000
-MONGODB_URI= mongodb+srv://lakshaypahwa47:Lakshay-0987@lakshay0.jni7bmo.mongodb.net
+MONGODB_URI= mongodb+srv://lakshaypahwa47:paasword@lakshay0.jni7bmo.mongodb.net
 CORS_ORIGIN =http://localhost:5173
 
 # JWT Configuration
