@@ -61,6 +61,6 @@ router.route("/:videoId").delete(verifyJWT, deleteVideo);
 router.route("/toggle/publish/:videoId").patch(verifyJWT, togglePublishStatus);
 
 // Convert video to audio (public route - authentication optional)
-router.route("/convert/audio/:videoId").get(verifyJWT, convertVideoToAudio);
+router.route("/convert/audio/:videoId").get(convertVideoToAudio);
 
 export default router;

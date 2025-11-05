@@ -41,29 +41,6 @@ connectDB()
 //     res.status(500).json({ message: "Something went wrong!" });
 // });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // this whole is one way to write the code and connect to the data base
 // =====================================================================
 // import express from "express"
