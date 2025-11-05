@@ -13,7 +13,8 @@ import {
   Heart,
   Trash2,
   Plus,
-  Check
+  Check,
+  Download
 } from 'lucide-react';
 import { fetchUserPlaylists, addVideoToPlaylist } from '../store/slices/playlistSlice';
 import CommentSection from '../components/Comments/CommentSection';
@@ -39,6 +40,8 @@ const VideoDetail = () => {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [selectedPlaylists, setSelectedPlaylists] = useState(new Set());
   const [shareMessage, setShareMessage] = useState('');
+  const [convertingAudio, setConvertingAudio] = useState(false);
+  const [audioUrl, setAudioUrl] = useState(null);
 
   useEffect(() => {
     fetchVideoDetails();
@@ -430,7 +433,7 @@ const VideoDetail = () => {
   const handleShare = async () => {
     try {
       const videoUrl = `${window.location.origin}/video/${videoId}`;
-      
+
       // Try to use the modern Clipboard API first
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(videoUrl);
@@ -445,7 +448,7 @@ const VideoDetail = () => {
         document.body.appendChild(textArea);
         textArea.focus();
         textArea.select();
-        
+
         try {
           document.execCommand('copy');
           setShareMessage('Link copied to clipboard!');
@@ -453,21 +456,74 @@ const VideoDetail = () => {
           console.error('Failed to copy text: ', err);
           setShareMessage('Failed to copy link');
         }
-        
+
         document.body.removeChild(textArea);
       }
-      
+
       // Clear the message after 3 seconds
       setTimeout(() => {
         setShareMessage('');
       }, 3000);
-      
+
     } catch (error) {
       console.error('Error sharing video:', error);
       setShareMessage('Failed to copy link');
       setTimeout(() => {
         setShareMessage('');
       }, 3000);
+    }
+  };
+
+  const handleConvertToAudio = async () => {
+    try {
+      setConvertingAudio(true);
+      const token = localStorage.getItem('accessToken');
+
+      if (!token) {
+        setShareMessage('You must be logged in to convert videos');
+        setTimeout(() => setShareMessage(''), 3000);
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/videos/convert/audio/${videoId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAudioUrl(data.data.audioUrl);
+        setShareMessage('Audio conversion completed! Click download to save.');
+
+        // Auto-clear message after 5 seconds
+        setTimeout(() => {
+          setShareMessage('');
+        }, 5000);
+      } else {
+        const errorData = await response.json();
+        setShareMessage(errorData.message || 'Failed to convert video to audio');
+        setTimeout(() => setShareMessage(''), 3000);
+      }
+    } catch (error) {
+      console.error('Error converting video to audio:', error);
+      setShareMessage('Failed to convert video to audio');
+      setTimeout(() => setShareMessage(''), 3000);
+    } finally {
+      setConvertingAudio(false);
+    }
+  };
+
+  const handleDownloadAudio = () => {
+    if (audioUrl) {
+      // Create a temporary anchor element to trigger download
+      const link = document.createElement('a');
+      link.href = audioUrl;
+      link.download = `${video.title}.mp3`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -602,7 +658,40 @@ const VideoDetail = () => {
                     <Share className="w-4 h-4" />
                     <span>Share</span>
                   </button>
-                  
+
+                  {/* Convert to Audio Button */}
+                  {audioUrl ? (
+                    <button
+                      onClick={handleDownloadAudio}
+                      className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white hover:bg-green-700 rounded-full transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download Audio</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleConvertToAudio}
+                      disabled={convertingAudio}
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-full transition-colors ${
+                        convertingAudio
+                          ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      {convertingAudio ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <span>Converting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4" />
+                          <span>Convert to MP3</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
                   {/* Delete Button - Only show for video owner */}
                   {video.owner && video.owner._id === localStorage.getItem('userId') && (
                     <button

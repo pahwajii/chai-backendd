@@ -6,6 +6,10 @@ import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import {deleteFromCloudinary} from "../utils/deletefromcloudinary.js"
+import { spawn } from 'child_process'
+import path from 'path'
+import fs from 'fs'
+import { fileURLToPath } from 'url'
 
 
 const getAllVideos = asyncHandler(async (req, res) => {
@@ -694,13 +698,13 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
 
     const pipeline = [
         // Match published videos (excluding current video)
-        { 
-            $match: { 
+        {
+            $match: {
                 isPublished: true,
                 _id: { $ne: new mongoose.Types.ObjectId(videoId) }
-            } 
+            }
         },
-        
+
         // Lookup owner information
         {
             $lookup: {
@@ -723,7 +727,7 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
                             3.0, // High score for same channel
                             0
                         ]},
-                        
+
                         // Score for keyword matches in title
                         { $multiply: [
                             { $size: { $setIntersection: [
@@ -732,7 +736,7 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
                             ]}},
                             1.5
                         ]},
-                        
+
                         // Score for keyword matches in description
                         { $multiply: [
                             { $size: { $setIntersection: [
@@ -741,7 +745,7 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
                             ]}},
                             0.5
                         ]},
-                        
+
                         // Score based on views (popularity)
                         { $multiply: [{ $log: { $add: ["$views", 1] } }, 0.2] }
                     ]
@@ -803,6 +807,138 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, relatedVideos, "Related videos fetched successfully"));
 });
 
+const convertVideoToAudio = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+
+    // Validate videoId
+    if (!mongoose.Types.ObjectId.isValid(videoId)) {
+        throw new ApiError(400, "Invalid video ID");
+    }
+
+    // Find the video
+    const video = await Video.findById(videoId);
+    if (!video) {
+        throw new ApiError(404, "Video not found");
+    }
+
+    // Check if video is published or if user is the owner
+    if (!video.isPublished && (!req.user || video.owner.toString() !== req.user._id.toString())) {
+        throw new ApiError(403, "You are not allowed to access this video");
+    }
+
+    // Get video URL from Cloudinary
+    const videoUrl = video.videoFile.url;
+    if (!videoUrl) {
+        throw new ApiError(400, "Video file not available");
+    }
+
+    // Create temporary directory for processing
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const tempDir = path.join(__dirname, '../../temp');
+
+    if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    // Generate unique filename for audio output
+    const audioFilename = `audio_${videoId}_${Date.now()}.mp3`;
+    const audioPath = path.join(tempDir, audioFilename);
+
+    try {
+        // Convert video to audio using Python script
+        const pythonScript = path.join(__dirname, '../../convert_video.py');
+
+        console.log('Starting Python conversion process...');
+        console.log('Python script path:', pythonScript);
+        console.log('Video URL:', videoUrl);
+        console.log('Audio output path:', audioPath);
+
+        // First, check if the video URL is accessible
+        try {
+            const urlCheck = await fetch(videoUrl, { method: 'HEAD' });
+            if (!urlCheck.ok) {
+                throw new ApiError(400, `Video URL is not accessible (HTTP ${urlCheck.status})`);
+            }
+            console.log('Video URL is accessible');
+        } catch (urlError) {
+            console.error('Video URL check failed:', urlError.message);
+            throw new ApiError(400, `Cannot access video URL: ${urlError.message}`);
+        }
+
+        await new Promise((resolve, reject) => {
+            const pythonProcess = spawn('python', [pythonScript, videoUrl, audioPath], {
+                stdio: ['pipe', 'pipe', 'pipe'],
+                cwd: path.dirname(pythonScript) // Set working directory to script location
+            });
+
+            let stdout = '';
+            let stderr = '';
+
+            pythonProcess.stdout.on('data', (data) => {
+                stdout += data.toString();
+                console.log('Python stdout:', data.toString());
+            });
+
+            pythonProcess.stderr.on('data', (data) => {
+                stderr += data.toString();
+                console.log('Python stderr:', data.toString());
+            });
+
+            pythonProcess.on('close', (code) => {
+                console.log('Python process exited with code:', code);
+                if (code === 0) {
+                    console.log('Python audio conversion completed successfully');
+                    resolve();
+                } else {
+                    console.error('Python conversion failed with code:', code);
+                    console.error('Stdout:', stdout);
+                    console.error('Stderr:', stderr);
+                    reject(new ApiError(500, `Audio conversion failed: ${stderr || 'Unknown error'}`));
+                }
+            });
+
+            pythonProcess.on('error', (err) => {
+                console.error('Failed to start Python process:', err);
+                reject(new ApiError(500, `Audio conversion process failed: ${err.message}`));
+            });
+        });
+
+        // Check if audio file was created
+        if (!fs.existsSync(audioPath)) {
+            throw new ApiError(500, 'Audio file was not created');
+        }
+
+        // Upload audio to Cloudinary
+        const audioUpload = await uploadOnCloudinary(audioPath);
+        if (!audioUpload) {
+            throw new ApiError(500, 'Failed to upload audio file');
+        }
+
+        // Clean up temporary file
+        if (fs.existsSync(audioPath)) {
+            fs.unlinkSync(audioPath);
+        }
+
+        // Return the audio URL
+        return res
+            .status(200)
+            .json(new ApiResponse(200, {
+                audioUrl: audioUpload.secure_url,
+                publicId: audioUpload.public_id,
+                title: video.title,
+                duration: video.duration
+            }, "Video converted to audio successfully"));
+
+    } catch (error) {
+        // Clean up temporary file in case of error
+        if (fs.existsSync(audioPath)) {
+            fs.unlinkSync(audioPath);
+        }
+        throw error;
+    }
+});
+
 export {
     getAllVideos,
     publishAVideo,
@@ -812,5 +948,6 @@ export {
     togglePublishStatus,
     getVideoRecommendations,
     getTrendingVideos,
-    getRelatedVideos
+    getRelatedVideos,
+    convertVideoToAudio
 }

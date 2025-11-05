@@ -8,7 +8,8 @@ import {
     togglePublishStatus,
     getVideoRecommendations,
     getTrendingVideos,
-    getRelatedVideos
+    getRelatedVideos,
+    convertVideoToAudio
 } from "../controllers/video.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { upload } from "../middlewares/multer.middleware.js";
@@ -58,5 +59,8 @@ router.route("/:videoId").delete(verifyJWT, deleteVideo);
 
 // Toggle publish status (protected route)
 router.route("/toggle/publish/:videoId").patch(verifyJWT, togglePublishStatus);
+
+// Convert video to audio (public route - authentication optional)
+router.route("/convert/audio/:videoId").get(verifyJWT, convertVideoToAudio);
 
 export default router;
