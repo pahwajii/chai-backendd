@@ -104,8 +104,8 @@ router
     getUserchannelprofile
 )
 /*The route is /c/:username because:
-:username lets you dynamically fetch any user’s channel.
-/c/ prefix avoids conflicts with other routes and makes it clear the endpoint is about channels (inspired by YouTube’s style).
+username parameter lets you dynamically fetch any user's channel.
+/c/ prefix avoids conflicts with other routes and makes it clear the endpoint is about channels (inspired by YouTube's style).
 */
 
 router

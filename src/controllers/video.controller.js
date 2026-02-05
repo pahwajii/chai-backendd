@@ -297,11 +297,317 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
         );
 })
 
+const getVideoRecommendations = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+    const { limit = 10 } = req.query;
+
+    // Validate videoId
+    if (!mongoose.Types.ObjectId.isValid(videoId)) {
+        throw new ApiError(400, "Invalid video ID");
+    }
+
+    // Get the current video to understand its context
+    const currentVideo = await Video.findById(videoId)
+        .populate("owner", "username fullName avatar");
+
+    if (!currentVideo) {
+        throw new ApiError(404, "Video not found");
+    }
+
+    // Get user's watch history for personalized recommendations
+    let userWatchHistory = [];
+    if (req.user) {
+        const user = await User.findById(req.user._id).select("watchHistory");
+        userWatchHistory = user?.watchHistory || [];
+    }
+
+    // Build recommendation pipeline
+    const pipeline = [
+        // Match published videos only
+        { $match: { isPublished: true, _id: { $ne: new mongoose.Types.ObjectId(videoId) } } },
+        
+        // Lookup owner information
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        { $unwind: "$owner" },
+
+        // Add recommendation score based on multiple factors
+        {
+            $addFields: {
+                recommendationScore: {
+                    $add: [
+                        // Score based on views (popularity)
+                        { $multiply: [{ $log: { $add: ["$views", 1] } }, 0.3] },
+                        
+                        // Score based on recency (newer videos get higher score)
+                        { $multiply: [{ $divide: [{ $subtract: [new Date(), "$createdAt"] }, 86400000] }, -0.1] },
+                        
+                        // Score based on same channel (if user likes this channel)
+                        { $cond: [
+                            { $eq: ["$owner._id", currentVideo.owner._id] },
+                            2.0, // Higher score for same channel
+                            0
+                        ]},
+                        
+                        // Score based on user's watch history (if video is in history, lower score)
+                        { $cond: [
+                            { $in: ["$_id", userWatchHistory] },
+                            -1.0, // Lower score for already watched videos
+                            0
+                        ]},
+                        
+                        // Score based on similar titles (basic keyword matching)
+                        { $cond: [
+                            { $regexMatch: { 
+                                input: "$title", 
+                                regex: new RegExp(currentVideo.title.split(' ').slice(0, 3).join('|'), 'i') 
+                            }},
+                            1.5, // Higher score for similar titles
+                            0
+                        ]}
+                    ]
+                }
+            }
+        },
+
+        // Sort by recommendation score
+        { $sort: { recommendationScore: -1 } },
+
+        // Limit results
+        { $limit: parseInt(limit) },
+
+        // Project only necessary fields
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                thumbnail: 1,
+                duration: 1,
+                views: 1,
+                createdAt: 1,
+                "owner.username": 1,
+                "owner.fullName": 1,
+                "owner.avatar": 1
+            }
+        }
+    ];
+
+    const recommendations = await Video.aggregate(pipeline);
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, recommendations, "Recommendations fetched successfully"));
+});
+
+const getTrendingVideos = asyncHandler(async (req, res) => {
+    const { limit = 20, timeRange = "7d" } = req.query;
+
+    // Calculate date range
+    let startDate = new Date();
+    switch (timeRange) {
+        case "1d":
+            startDate.setDate(startDate.getDate() - 1);
+            break;
+        case "7d":
+            startDate.setDate(startDate.getDate() - 7);
+            break;
+        case "30d":
+            startDate.setDate(startDate.getDate() - 30);
+            break;
+        default:
+            startDate.setDate(startDate.getDate() - 7);
+    }
+
+    const pipeline = [
+        // Match published videos within time range
+        { 
+            $match: { 
+                isPublished: true,
+                createdAt: { $gte: startDate }
+            } 
+        },
+        
+        // Lookup owner information
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        { $unwind: "$owner" },
+
+        // Calculate trending score based on views and recency
+        {
+            $addFields: {
+                trendingScore: {
+                    $add: [
+                        // Views score (logarithmic to prevent viral videos from dominating)
+                        { $multiply: [{ $log: { $add: ["$views", 1] } }, 0.4] },
+                        
+                        // Recency score (newer videos get higher score)
+                        { $multiply: [{ $divide: [{ $subtract: [new Date(), "$createdAt"] }, 86400000] }, -0.2] },
+                        
+                        // Engagement score (if we had likes/comments, we'd include them here)
+                        { $multiply: ["$views", 0.001] }
+                    ]
+                }
+            }
+        },
+
+        // Sort by trending score
+        { $sort: { trendingScore: -1 } },
+
+        // Limit results
+        { $limit: parseInt(limit) },
+
+        // Project only necessary fields
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                thumbnail: 1,
+                duration: 1,
+                views: 1,
+                createdAt: 1,
+                trendingScore: 1,
+                "owner.username": 1,
+                "owner.fullName": 1,
+                "owner.avatar": 1
+            }
+        }
+    ];
+
+    const trendingVideos = await Video.aggregate(pipeline);
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, trendingVideos, "Trending videos fetched successfully"));
+});
+
+const getRelatedVideos = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+    const { limit = 10 } = req.query;
+
+    // Validate videoId
+    if (!mongoose.Types.ObjectId.isValid(videoId)) {
+        throw new ApiError(400, "Invalid video ID");
+    }
+
+    // Get the current video
+    const currentVideo = await Video.findById(videoId)
+        .populate("owner", "username fullName avatar");
+
+    if (!currentVideo) {
+        throw new ApiError(404, "Video not found");
+    }
+
+    // Extract keywords from title and description
+    const titleWords = currentVideo.title.toLowerCase().split(/\s+/).filter(word => word.length > 3);
+    const descriptionWords = currentVideo.description.toLowerCase().split(/\s+/).filter(word => word.length > 3);
+    const keywords = [...new Set([...titleWords, ...descriptionWords])];
+
+    const pipeline = [
+        // Match published videos (excluding current video)
+        { 
+            $match: { 
+                isPublished: true,
+                _id: { $ne: new mongoose.Types.ObjectId(videoId) }
+            } 
+        },
+        
+        // Lookup owner information
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        { $unwind: "$owner" },
+
+        // Add relevance score
+        {
+            $addFields: {
+                relevanceScore: {
+                    $add: [
+                        // Score for same channel
+                        { $cond: [
+                            { $eq: ["$owner._id", currentVideo.owner._id] },
+                            3.0, // High score for same channel
+                            0
+                        ]},
+                        
+                        // Score for keyword matches in title
+                        { $multiply: [
+                            { $size: { $setIntersection: [
+                                { $split: [{ $toLower: "$title" }, " "] },
+                                keywords
+                            ]}},
+                            1.5
+                        ]},
+                        
+                        // Score for keyword matches in description
+                        { $multiply: [
+                            { $size: { $setIntersection: [
+                                { $split: [{ $toLower: "$description" }, " "] },
+                                keywords
+                            ]}},
+                            0.5
+                        ]},
+                        
+                        // Score based on views (popularity)
+                        { $multiply: [{ $log: { $add: ["$views", 1] } }, 0.2] }
+                    ]
+                }
+            }
+        },
+
+        // Sort by relevance score
+        { $sort: { relevanceScore: -1 } },
+
+        // Limit results
+        { $limit: parseInt(limit) },
+
+        // Project only necessary fields
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                thumbnail: 1,
+                duration: 1,
+                views: 1,
+                createdAt: 1,
+                "owner.username": 1,
+                "owner.fullName": 1,
+                "owner.avatar": 1
+            }
+        }
+    ];
+
+    const relatedVideos = await Video.aggregate(pipeline);
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, relatedVideos, "Related videos fetched successfully"));
+});
+
 export {
     getAllVideos,
     publishAVideo,
     getVideoById,
     updateVideo,
     deleteVideo,
-    togglePublishStatus
+    togglePublishStatus,
+    getVideoRecommendations,
+    getTrendingVideos,
+    getRelatedVideos
 }

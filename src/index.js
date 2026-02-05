@@ -33,7 +33,7 @@ connectDB()
         console.error("MongoDB connection failed!!!", err);
         // Optional: exit the process if DB connection is critical
         process.exit(1);
-    });
+    }); 
 
 // global app-level error handler (for express errors)
 // app.use((err, req, res, next) => {
