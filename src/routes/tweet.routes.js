@@ -20,9 +20,9 @@ router.route("/").post(verifyJWT, createTweet);
 router.route("/user/:username").get(getUserTweets);
 
 // Update tweet (protected route)
-router.route("/:tweetID").patch(verifyJWT, updateTweet);
+router.route("/:tweetId").patch(verifyJWT, updateTweet);
 
 // Delete tweet (protected route)
-router.route("/:tweetID").delete(verifyJWT, deleteTweet);
+router.route("/:tweetId").delete(verifyJWT, deleteTweet);
 
 export default router;

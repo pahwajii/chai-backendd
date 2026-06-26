@@ -158,9 +158,9 @@ const updateComment = asyncHandler(async (req, res) => {
     Update the comment’s content in the database.
     Return a success response with the updated comment.
  */
-    const {commentID} = req.params
+    const {commentId} = req.params
 
-    if(!mongoose.Types.ObjectId.isValid(commentID)){
+    if(!mongoose.Types.ObjectId.isValid(commentId)){
         throw new ApiError(400,"commentId is invalid")
     }
     const {content}= req.body
@@ -170,7 +170,7 @@ const updateComment = asyncHandler(async (req, res) => {
         }
     
         const comment = await Comment.findByIdAndUpdate(
-            commentID,
+            commentId,
             {
                 $set:{
                     content:content
@@ -193,13 +193,13 @@ const deleteComment = asyncHandler(async (req, res) => {
     Delete the comment from the database (using findByIdAndDelete or similar).
     Send response with success message and maybe return the deleted comment if needed
     */
-    const { commentID } = req.params
+    const { commentId } = req.params
 
-    if (!mongoose.Types.ObjectId.isValid(commentID)) {
+    if (!mongoose.Types.ObjectId.isValid(commentId)) {
         throw new ApiError(400, "commentId is invalid")
     }
 
-    const comment = await Comment.findById(commentID)
+    const comment = await Comment.findById(commentId)
     if (!comment) {
         throw new ApiError(404, "comment not found")
     }
@@ -209,7 +209,7 @@ const deleteComment = asyncHandler(async (req, res) => {
         throw new ApiError(403, "You are not authorized to delete this comment")
     }
 
-    await Comment.findByIdAndDelete(commentID)
+    await Comment.findByIdAndDelete(commentId)
 
     return res
         .status(200)

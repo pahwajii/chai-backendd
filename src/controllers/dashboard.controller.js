@@ -9,15 +9,15 @@ import {asyncHandler} from "../utils/asyncHandler.js"
 
 const getChannelStats = asyncHandler(async (req, res) => {
     // TODO: Get the channel stats like total video views, total subscribers, total videos, total likes etc.
-    const {channelID}= req.params
+    const {channelId}= req.params
 
-    if(!mongoose.Types.ObjectId.isValid(channelID)){
-        throw new ApiError(400,"Invalid channelID")
+    if(!mongoose.Types.ObjectId.isValid(channelId)){
+        throw new ApiError(400,"Invalid channelId")
     }
     const channelstats = await User.aggregate([
         {
             $match:{
-                _id:new mongoose.Types.ObjectId(channelID)
+                _id:new mongoose.Types.ObjectId(channelId)
             }
         },
         {
@@ -88,20 +88,20 @@ const getChannelStats = asyncHandler(async (req, res) => {
 
 const getChannelVideos = asyncHandler(async (req, res) => {
     // TODO: Get all the videos uploaded by the channel
-    const {channelID}= req.params;
+    const {channelId}= req.params;
 
-    if((!mongoose.Types.ObjectId.isValid(channelID))){
-        throw new ApiError(400,"Invalid ChannelID")
+    if((!mongoose.Types.ObjectId.isValid(channelId))){
+        throw new ApiError(400,"Invalid channelId")
     }
 
     const videos = await Video.find({
-        owner:channelID
+        owner:channelId
     })
     .sort({createdAt:-1})
     .populate("owner","username avatar")
     .select("title description thumbnail views likes createdAt")
 
-    console.log(`Found ${videos.length} videos for channel ${channelID}`);
+    console.log(`Found ${videos.length} videos for channel ${channelId}`);
     console.log('Videos:', videos);
 
     return res 

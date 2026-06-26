@@ -14,7 +14,7 @@ app.use(cors({
     credentials: true,
 }))
 
-app.options("*", cors({
+app.options(/.*/, cors({
   origin : process.env.CORS_ORIGIN,
   credentials : true
 }));

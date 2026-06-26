@@ -25,10 +25,10 @@ router.get("/tweet/:tweetId", getTweetComments);
 router.post("/tweet/:tweetId", verifyJWT, addTweetComment);
 
 // ✅ Update a comment (protected route)
-router.put("/:commentID", verifyJWT, updateComment);
+router.put("/:commentId", verifyJWT, updateComment);
 
 // ✅ Delete a comment (protected route)
-router.delete("/:commentID", verifyJWT, deleteComment);
+router.delete("/:commentId", verifyJWT, deleteComment);
 
 export default router;
 
