@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Home, 
   Search, 
@@ -21,17 +21,24 @@ import { logout } from '../../store/slices/authSlice';
 
 const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     dispatch(logout());
   };
 
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
+
   const sidebarItems = [
     { icon: Home, label: 'Home', path: '/' },
-    { icon: Search, label: 'Search', path: '/search' },
     { icon: Library, label: 'Library', path: '/playlists' },
     { icon: History, label: 'History', path: '/history' },
     { icon: PlaySquare, label: 'Your Videos', path: isAuthenticated ? `/channel/${user?.username}` : '/login' },
@@ -54,20 +61,21 @@ const Layout = ({ children }) => {
               <Menu className="w-6 h-6" />
             </button>
             <Link to="/" className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
-                <Play className="w-6 h-6 text-white" />
-              </div>
+              <img src="/feedflow2.png" alt="FeedTube" className="w-12 h-12 rounded-full shadow-lg" />
               <span className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-blue-600 bg-clip-text text-transparent">
-                PLAY
+                feedtube
               </span>
             </Link>
           </div>
 
-          <div className="flex-1 max-w-2xl mx-8 hidden md:block">
+          <div className="flex-1 max-w-2xl mx-8">
             <div className="relative">
               <input
                 type="text"
                 placeholder="Search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 className="w-full bg-dark-800 border border-dark-600 rounded-full px-6 py-3 pl-12 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
               />
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />

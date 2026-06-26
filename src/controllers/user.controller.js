@@ -1,6 +1,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {ApiError} from "../utils/ApiError.js"
 import {User} from "../models/user.model.js"
+import {Video} from "../models/video.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import jwt from "jsonwebtoken"
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -53,7 +54,7 @@ const registerUser = asyncHandler(async(req,res)=> {
     console.log("email:",email);
     console.log("password", password);
     
-    console.log('====================================');
+    // console.log('====================================');
     // if (fullName === ""){
     //     throw new ApiError(400,"fullName is required")
     // } //begineers do like this 
@@ -100,23 +101,22 @@ const registerUser = asyncHandler(async(req,res)=> {
         coverimagelLocalPath= req.files.coverImage[0].path
     }
 
-    if(!avatarLocalPath){
-        throw new ApiError(400 , "AVATAR FILE IS REQUIRED")
+    let avatar;
+    if (avatarLocalPath) {
+        avatar = await uploadOnCloudinary(avatarLocalPath);
+        if (!avatar) {
+            throw new ApiError(400, "Error uploading avatar");
+        }
     }
 
-    const avatar = await uploadOnCloudinary(avatarLocalPath)
-    const coverImage = await uploadOnCloudinary(coverimagelLocalPath)
-
-    if(!avatar){
-        throw new ApiError(400 , "AVATAR FILE IS REQUIRED")
-    }
+    const coverImage = coverimagelLocalPath ? await uploadOnCloudinary(coverimagelLocalPath) : null;
 
     const user = await User.create({
         fullName,
-        avatar: {
+        avatar: avatar ? {
             url: avatar.secure_url,
             publicId: avatar.public_id
-        },
+        } : undefined,
         coverImage: coverImage
             ? {
                 url: coverImage.secure_url,
@@ -137,9 +137,25 @@ const registerUser = asyncHandler(async(req,res)=> {
         throw new ApiError(500 , "something went wrong while creating the user")
     }
 
-    return res.status(201).json(
-        new ApiResponse(200,createdUser,"User registered successfully")
-    )
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(createdUser._id);
+
+    const options = {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict"
+    };
+
+    return res
+        .status(201)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(
+            new ApiResponse(201, {
+                user: createdUser,
+                accessToken,
+                refreshToken
+            }, "User registered successfully")
+        );
 })
 
 
@@ -493,40 +509,43 @@ const getUserchannelprofile = asyncHandler(async (req,res)=>{
                 channelsubscribedtoCount:{
                     $size :"$subscribedto"
                 },
-                isSubscribed:{
-                    $cond:{
-                        //for conditioning we use cond
-                        //$in object /array dono me check krleta hai ki usme hai ya nhi 
-                        if:{$in :[req.user?._id,"$subscribers.subscriber"]},// yhn per hamne object ke andar jaake dekha hai 
-                        then :true,
-                        else:false
-                    },
-
-                },
+                // isSubscribed will be calculated in controller
 
             }
         },
         {
             $project:{
                 // selected cheezo ko project krne ke liye $project use krte hai
+                _id:1,
                 fullName:1,
                 username:1,
                 subscriberscount:1,
                 channelsubscribedtoCount:1,
-                isSubscribed:1,
                 avatar:1,
                 coverImage:1,
                 email:1,
+                subscribers:1,
             }
         }
         
     ])//pipeline aese likhi jaati hai
-    console.log(channel);
+    console.log('Channel aggregation result:', channel);
     if(!channel?.length){
         throw new ApiError(404,"channel does not exist")
     }
+
+    // Calculate isSubscribed
+    if (req.user) {
+        channel[0].isSubscribed = channel[0].subscribers.some(sub => sub.subscriber.equals(req.user._id));
+    } else {
+        channel[0].isSubscribed = false;
+    }
+
+    // Remove subscribers from response
+    delete channel[0].subscribers;
+
     return res.status(200)
-    .json(new ApiResponse(200,"USER channel fetched successfully", channel[0]))
+    .json(new ApiResponse(200, channel[0], "USER channel fetched successfully"))
 })
 
 /*{
@@ -617,12 +636,78 @@ const getUserchannelprofile = asyncHandler(async (req,res)=>{
 //         )
 //     )
 // })
+const addToWatchHistory = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  const userId = req.user?._id;
+
+  console.log('addToWatchHistory called with videoId:', videoId, 'userId:', userId);
+
+  if (!userId) {
+    throw new ApiError(401, "Unauthorized: No user ID");
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(videoId)) {
+    throw new ApiError(400, "Invalid video ID");
+  }
+
+  // Check if video exists
+  console.log('Checking if video exists...');
+  const video = await Video.findById(videoId);
+  if (!video) {
+    console.log('Video not found with ID:', videoId);
+    throw new ApiError(404, "Video not found");
+  }
+
+  console.log('Video found:', video._id, 'title:', video.title);
+
+  // Add video to watch history, remove duplicates and keep only recent entries
+  console.log('Updating user watchHistory...');
+
+  // First, remove the video if it already exists
+  await User.findByIdAndUpdate(
+    userId,
+    { $pull: { watchHistory: videoId } }
+  );
+
+  // Then, add it to the beginning
+  const user = await User.findByIdAndUpdate(
+    userId,
+    {
+      $push: {
+        watchHistory: {
+          $each: [videoId],
+          $position: 0 // Add to beginning
+        }
+      }
+    },
+    { new: true }
+  ).select("-password -refreshToken");
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  console.log('Updated user watchHistory length:', user.watchHistory?.length || 0);
+  console.log('Updated user watchHistory:', user.watchHistory);
+
+  return res.status(200).json(
+    new ApiResponse(200, user.watchHistory, "Video added to watch history")
+  );
+});
+
 const getWatchHistory = asyncHandler(async (req, res) => {
   const userId = req.user?._id; // coming from auth middleware
+
+  console.log('getWatchHistory called for userId:', userId);
 
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized: No user ID" });
   }
+
+  // First, let's check what the user's watchHistory looks like
+  const userCheck = await User.findById(userId).select('watchHistory');
+  console.log('User watchHistory from database:', userCheck?.watchHistory);
+  console.log('WatchHistory length:', userCheck?.watchHistory?.length || 0);
 
   const user = await User.aggregate([
     {
@@ -664,9 +749,14 @@ const getWatchHistory = asyncHandler(async (req, res) => {
     },
   ]);
 
+  console.log('Aggregation result length:', user?.length);
+  console.log('Aggregation watchHistory length:', user?.[0]?.watchHistory?.length || 0);
+
   if (!user || user.length === 0) {
     return res.status(404).json({ message: "User not found" });
   }
+
+  console.log('Returning watchHistory:', user[0].watchHistory);
 
   return res.status(200).json(
     new ApiResponse(
@@ -679,11 +769,12 @@ const getWatchHistory = asyncHandler(async (req, res) => {
 
 
 export {
-    registerUser, 
+    addToWatchHistory,
+    registerUser,
     loginUser,
     logoutUser,
     refreshAccessToken,
-    getCurrentuser, 
+    getCurrentuser,
     changeCurrentPassword,
     updateAccountDetails,
     updateUserAvatar,

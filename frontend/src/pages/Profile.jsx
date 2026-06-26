@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { 
-  User, 
-  Calendar, 
-  Eye, 
-  ThumbsUp, 
-  Play, 
-  Users, 
+import {
+  User,
+  Calendar,
+  Eye,
+  ThumbsUp,
+  Play,
+  Users,
   Settings,
   Edit3,
   Camera,
@@ -16,12 +16,16 @@ import {
   Video,
   Clock,
   Mail,
-  MapPin
+  MapPin,
+  X,
+  Save,
+  Lock
 } from 'lucide-react';
-import { getCurrentUser } from '../store/slices/authSlice';
+import { getCurrentUser, updateAccountDetails, updateUserAvatar, changeCurrentPassword } from '../store/slices/authSlice';
 import { fetchVideos } from '../store/slices/videoSlice';
 import { fetchTweets } from '../store/slices/tweetSlice';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const Profile = () => {
   const { username } = useParams();
   const dispatch = useDispatch();
@@ -31,10 +35,21 @@ const Profile = () => {
   const [activeTab, setActiveTab] = useState('videos');
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [profileUser, setProfileUser] = useState(null);
-  const [subscribers, setSubscribers] = useState([]);
+  const [userId, setUserId] = useState(null);
   const [subscribedChannels, setSubscribedChannels] = useState([]);
   const [channelStats, setChannelStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    fullName: '',
+    email: ''
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [avatarFile, setAvatarFile] = useState(null);
 
   useEffect(() => {
     const fetchProfileData = async () => {
@@ -44,22 +59,42 @@ const Profile = () => {
         if (username === user?.username) {
           setIsOwnProfile(true);
           setProfileUser(user);
+          setUserId(user._id);
+          setEditForm({
+            fullName: user?.fullName || '',
+            email: user?.email || ''
+          });
           await dispatch(getCurrentUser());
+
+          // Fetch user's videos
+          await dispatch(fetchVideos({ userId: user._id }));
+
+          // Fetch user's tweets
+          await dispatch(fetchTweets(username));
         } else {
           setIsOwnProfile(false);
           // Fetch other user's profile data
-          // This would require a new API endpoint to get user by username
-          setProfileUser({ username, fullName: username, avatar: null });
-        }
+          try {
+            const response = await fetch(`${API_BASE_URL}/users/c/${username}`);
+            if (response.ok) {
+              const data = await response.json();
+              setProfileUser(data.data);
+              setUserId(data.data._id);
 
-        // Fetch user's videos
-        if (username) {
-          await dispatch(fetchVideos({ userId: username }));
-        }
+              // Fetch user's videos
+              await dispatch(fetchVideos({ userId: data.data._id }));
 
-        // Fetch user's tweets
-        if (username) {
-          await dispatch(fetchTweets(username));
+              // Fetch user's tweets
+              await dispatch(fetchTweets(username));
+            } else {
+              setProfileUser({ username, fullName: username, avatar: null });
+              setUserId(null);
+            }
+          } catch (error) {
+            console.error('Error fetching user:', error);
+            setProfileUser({ username, fullName: username, avatar: null });
+            setUserId(null);
+          }
         }
 
         // Fetch subscriptions data
@@ -75,21 +110,20 @@ const Profile = () => {
     fetchProfileData();
   }, [dispatch, username, user?.username]);
 
-  const fetchSubscriptions = async () => {
-    try {
-      // Fetch subscribers
-      const subscribersResponse = await fetch(`http://localhost:8000/api/v1/subscriptions/channel/${user?._id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-        },
+  useEffect(() => {
+    if (user) {
+      setEditForm({
+        fullName: user.fullName || '',
+        email: user.email || ''
       });
-      if (subscribersResponse.ok) {
-        const subscribersData = await subscribersResponse.json();
-        setSubscribers(subscribersData.data || []);
-      }
+    }
+  }, [user]);
 
+  const fetchSubscriptions = async () => {
+    if (!user?._id) return;
+    try {
       // Fetch subscribed channels
-      const subscribedResponse = await fetch(`http://localhost:8000/api/v1/subscriptions/subscriber/${user?._id}`, {
+      const subscribedResponse = await fetch(`${API_BASE_URL}/subscriptions/subscriber/${user._id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -104,8 +138,9 @@ const Profile = () => {
   };
 
   const fetchChannelStats = async () => {
+    if (!user?._id) return;
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/dashboard/stats/${user?._id}`, {
+      const response = await fetch(`${API_BASE_URL}/dashboard/stats/${user._id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -129,12 +164,83 @@ const Profile = () => {
   };
 
   const formatViews = (views) => {
-    if (views >= 1000000) {
-      return `${(views / 1000000).toFixed(1)}M`;
-    } else if (views >= 1000) {
-      return `${(views / 1000).toFixed(1)}K`;
+    const numViews = Number(views) || 0;
+    if (numViews >= 1000000) {
+      return `${(numViews / 1000000).toFixed(1)}M`;
+    } else if (numViews >= 1000) {
+      return `${(numViews / 1000).toFixed(1)}K`;
     }
-    return views.toString();
+    return numViews.toString();
+  };
+
+  const formatDuration = (seconds) => {
+    const numSeconds = Number(seconds) || 0;
+    const hours = Math.floor(numSeconds / 3600);
+    const minutes = Math.floor((numSeconds % 3600) / 60);
+    const secs = Math.floor(numSeconds % 60);
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleEditProfile = () => {
+    setIsEditing(true);
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      await dispatch(updateAccountDetails(editForm));
+      setIsEditing(false);
+      // Refresh user data
+      await dispatch(getCurrentUser());
+    } catch (error) {
+      console.error('Error updating profile:', error);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditForm({
+      fullName: user?.fullName || '',
+      email: user?.email || ''
+    });
+  };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setAvatarFile(file);
+      try {
+        await dispatch(updateUserAvatar(file));
+        // Refresh user data
+        await dispatch(getCurrentUser());
+      } catch (error) {
+        console.error('Error updating avatar:', error);
+      }
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      alert('New passwords do not match');
+      return;
+    }
+    try {
+      await dispatch(changeCurrentPassword({
+        oldPassword: passwordForm.oldPassword,
+        newPassword: passwordForm.newPassword
+      }));
+      setPasswordForm({
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+      alert('Password changed successfully');
+    } catch (error) {
+      console.error('Error changing password:', error);
+    }
   };
 
   const tabs = [
@@ -166,23 +272,68 @@ const Profile = () => {
                 className="w-32 h-32 rounded-full object-cover border-4 border-dark-600 shadow-2xl"
               />
               {isOwnProfile && (
-                <button className="absolute bottom-2 right-2 p-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-full transition-all shadow-lg">
+                <label className="absolute bottom-2 right-2 p-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-full transition-all shadow-lg cursor-pointer">
                   <Camera className="w-5 h-5 text-white" />
-                </button>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarChange}
+                    className="hidden"
+                  />
+                </label>
               )}
             </div>
 
           {/* User Info */}
           <div className="flex-1">
             <div className="flex items-center space-x-4 mb-3">
-              <h1 className="text-3xl font-bold text-white">{profileUser?.fullName}</h1>
-              {isOwnProfile && (
-                <button className="p-3 text-gray-400 hover:text-white transition-colors bg-dark-700 hover:bg-dark-600 rounded-lg">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editForm.fullName}
+                  onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                  className="text-3xl font-bold text-white bg-dark-800 border border-dark-600 rounded px-2 py-1"
+                />
+              ) : (
+                <h1 className="text-3xl font-bold text-white">{profileUser?.fullName}</h1>
+              )}
+              {isOwnProfile && !isEditing && (
+                <button
+                  onClick={handleEditProfile}
+                  className="p-3 text-gray-400 hover:text-white transition-colors bg-dark-700 hover:bg-dark-600 rounded-lg"
+                >
                   <Edit3 className="w-5 h-5" />
                 </button>
               )}
+              {isEditing && (
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleSaveProfile}
+                    className="p-3 text-green-400 hover:text-green-300 transition-colors bg-dark-700 hover:bg-dark-600 rounded-lg"
+                  >
+                    <Save className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="p-3 text-red-400 hover:text-red-300 transition-colors bg-dark-700 hover:bg-dark-600 rounded-lg"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
             </div>
             <p className="text-gray-400 mb-4 text-lg">@{profileUser?.username}</p>
+            {isEditing && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="w-full bg-dark-800 border border-dark-600 rounded px-3 py-2 text-white"
+                />
+              </div>
+            )}
             
             {/* Stats */}
             <div className="flex items-center space-x-6 text-sm text-gray-400 mb-4">
@@ -205,9 +356,11 @@ const Profile = () => {
             </div>
 
             {/* Bio */}
-            <p className="text-gray-300 mb-4">
-              {profileUser?.bio || "No bio available"}
-            </p>
+            {profileUser?.bio && (
+              <p className="text-gray-300 mb-4">
+                {profileUser.bio}
+              </p>
+            )}
 
             {/* Action Buttons */}
             <div className="flex items-center space-x-4">
@@ -220,23 +373,85 @@ const Profile = () => {
                     <Video className="w-5 h-5" />
                     <span>Upload Video</span>
                   </Link>
-                  <button className="flex items-center space-x-3 px-6 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-all border border-dark-600 font-medium">
-                    <Settings className="w-5 h-5" />
-                    <span>Settings</span>
-                  </button>
+                  <Link
+                    to="/settings"
+                    className="flex items-center space-x-3 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl transition-all shadow-lg font-medium"
+                  >
+                    <Edit3 className="w-5 h-5" />
+                    <span>Edit Profile</span>
+                  </Link>
                 </>
               ) : (
-                <button className="flex items-center space-x-3 px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all shadow-lg font-medium">
-                  <Users className="w-5 h-5" />
-                  <span>Subscribe</span>
-                </button>
+                <div className="flex items-center space-x-4">
+                  <button className="flex items-center space-x-3 px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all shadow-lg font-medium">
+                    <Users className="w-5 h-5" />
+                    <span>Subscribe</span>
+                  </button>
+                  {isAuthenticated && (
+                    <Link
+                      to="/settings"
+                      className="flex items-center space-x-3 px-6 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-all border border-dark-600 font-medium"
+                    >
+                      <Settings className="w-5 h-5" />
+                      <span>Settings</span>
+                    </Link>
+                  )}
+                </div>
               )}
             </div>
           </div>
         </div>
       </div>
 
-        {/* Tabs */}
+      {/* Password Change Section */}
+      {isOwnProfile && (
+        <div className="bg-dark-800 rounded-2xl p-6 mb-8 border border-dark-700">
+          <h2 className="text-xl font-semibold text-white mb-4 flex items-center space-x-2">
+            <Lock className="w-5 h-5" />
+            <span>Change Password</span>
+          </h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Current Password</label>
+              <input
+                type="password"
+                value={passwordForm.oldPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, oldPassword: e.target.value })}
+                className="w-full bg-dark-700 border border-dark-600 rounded px-3 py-2 text-white"
+                placeholder="Enter current password"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">New Password</label>
+              <input
+                type="password"
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                className="w-full bg-dark-700 border border-dark-600 rounded px-3 py-2 text-white"
+                placeholder="Enter new password"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Confirm New Password</label>
+              <input
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                className="w-full bg-dark-700 border border-dark-600 rounded px-3 py-2 text-white"
+                placeholder="Confirm new password"
+              />
+            </div>
+            <button
+              onClick={handlePasswordChange}
+              className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-all"
+            >
+              Change Password
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
         <div className="flex space-x-2 mb-8 bg-dark-800 rounded-2xl p-2 border border-dark-700">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -293,8 +508,8 @@ const Profile = () => {
                         alt={video.title}
                         className="w-full aspect-video object-cover rounded-lg"
                       />
-                      <div className="absolute bottom-2 right-2 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
-                        {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
+                      <div className="absolute bottom-3 right-3 bg-black/80 text-white text-sm px-2 py-1 rounded-lg backdrop-blur-sm">
+                        {formatDuration(video.duration)}
                       </div>
                     </div>
                     <div className="mt-3">
@@ -387,37 +602,7 @@ const Profile = () => {
 
       {/* Subscriptions Section */}
       {isOwnProfile && (
-        <div className="mt-12 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Subscribers */}
-          <div className="bg-dark-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
-              <Users className="w-5 h-5" />
-              <span>Subscribers ({subscribers.length})</span>
-            </h3>
-            {subscribers.length === 0 ? (
-              <p className="text-gray-400">No subscribers yet</p>
-            ) : (
-              <div className="space-y-3">
-                {subscribers.slice(0, 5).map((subscriber) => (
-                  <div key={subscriber._id} className="flex items-center space-x-3">
-                    <img
-                      src={subscriber.subscriber?.avatar?.url || '/default-avatar.png'}
-                      alt={subscriber.subscriber?.fullName}
-                      className="w-8 h-8 rounded-full"
-                    />
-                    <div>
-                      <p className="text-white font-medium">{subscriber.subscriber?.fullName}</p>
-                      <p className="text-sm text-gray-400">@{subscriber.subscriber?.username}</p>
-                    </div>
-                  </div>
-                ))}
-                {subscribers.length > 5 && (
-                  <p className="text-sm text-gray-400">And {subscribers.length - 5} more...</p>
-                )}
-              </div>
-            )}
-          </div>
-
+        <div className="mt-12">
           {/* Subscribed Channels */}
           <div className="bg-dark-800 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">

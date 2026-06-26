@@ -1,6 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
 import { 
   Upload as UploadIcon, 
   Video, 
@@ -11,10 +10,10 @@ import {
   FileVideo,
   ImageIcon
 } from 'lucide-react';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const Upload = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useSelector((state) => state.auth);
   const [dragActive, setDragActive] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [selectedThumbnail, setSelectedThumbnail] = useState(null);
@@ -27,13 +26,8 @@ const Upload = () => {
   
   const videoInputRef = useRef(null);
   const thumbnailInputRef = useRef(null);
-
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-    }
-  }, [isAuthenticated, navigate]);
+  
+  
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -90,10 +84,23 @@ const Upload = () => {
       return;
     }
 
-    if (!isAuthenticated) {
-      setError('Please log in to upload videos');
-      navigate('/login');
+    // Check file sizes
+    const maxVideoSize = 100 * 1024 * 1024; // 100MB
+    const maxThumbnailSize = 10 * 1024 * 1024; // 10MB
+
+    if (selectedVideo.size > maxVideoSize) {
+      setError('Video file is too large. Maximum size is 100MB');
       return;
+    }
+
+    if (selectedThumbnail && selectedThumbnail.size > maxThumbnailSize) {
+      setError('Thumbnail file is too large. Maximum size is 10MB');
+      return;
+    }
+
+    console.log(`Video file size: ${(selectedVideo.size / 1024 / 1024).toFixed(2)}MB`);
+    if (selectedThumbnail) {
+      console.log(`Thumbnail file size: ${(selectedThumbnail.size / 1024 / 1024).toFixed(2)}MB`);
     }
 
     setIsUploading(true);
@@ -109,14 +116,22 @@ const Upload = () => {
       formData.append('title', title);
       formData.append('description', description);
 
+      // Get the access token from localStorage
       const token = localStorage.getItem('accessToken');
-      const response = await fetch('http://localhost:8000/api/v1/videos/publish', {
+      if (!token) {
+        setError('You must be logged in to upload videos');
+        setUploadStatus('error');
+        setIsUploading(false);
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/videos/publish`, {
         method: 'POST',
         body: formData,
-        credentials: 'include',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -151,18 +166,6 @@ const Upload = () => {
     setUploadProgress(0);
     setError('');
   };
-
-  // Show loading if checking authentication
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-dark-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
-          <p className="text-gray-400">Redirecting to login...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-dark-900">

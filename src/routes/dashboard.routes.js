@@ -11,6 +11,6 @@ const router = Router();
 router.route("/stats/:channelID").get(verifyJWT, getChannelStats);
 
 // Get channel videos
-router.route("/videos/:channelID").get(verifyJWT, getChannelVideos);
+router.route("/videos/:channelID").get(getChannelVideos);
 
 export default router;

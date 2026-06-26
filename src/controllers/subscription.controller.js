@@ -32,17 +32,25 @@ const toggleSubscription = asyncHandler(async (req, res) => {
         // ❌ Mistake before: passed the whole object to findByIdAndDelete
         // ✅ Fix: use existingSubscription._id
         await Subscription.findByIdAndDelete(existingSubscription._id);
+
+        // Get updated subscriber count
+        const subscriberCount = await Subscription.countDocuments({ channel: channelId });
+
         return res
             .status(200)
-            .json(new ApiResponse(200, null, "Unsubscribed successfully"));
+            .json(new ApiResponse(200, { subscriberCount }, "Unsubscribed successfully"));
     } else {
         const subscription = await Subscription.create({
             subscriber: req.user._id,
             channel: channelId,
-        })
+        });
+
+        // Get updated subscriber count
+        const subscriberCount = await Subscription.countDocuments({ channel: channelId });
+
         return res
             .status(201)
-            .json(new ApiResponse(201, subscription, "Subscribed successfully"));
+            .json(new ApiResponse(201, { subscription, subscriberCount }, "Subscribed successfully"));
     }
 })
 
@@ -93,15 +101,53 @@ const getSubscribedChannels = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Subscriber not found");
     }
 
-    // ❌ Mistake before: wrote wrong field ("subs" instead of subscriber)
-    // ✅ Fix: correct query is { subscriber: subscriberId }
-    // ❌ Mistake before: did not await .populate("channel")
-    const channels = await Subscription.find({ subscriber: subscriberId })
-        .populate("channel")
+    // Use aggregation to get channels with subscribersCount
+    const channels = await Subscription.aggregate([
+        { $match: { subscriber: new mongoose.Types.ObjectId(subscriberId) } },
+        {
+            $lookup: {
+                from: "users",
+                localField: "channel",
+                foreignField: "_id",
+                as: "channel",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "subscriptions",
+                            localField: "_id",
+                            foreignField: "channel",
+                            as: "subscribers"
+                        }
+                    },
+                    {
+                        $addFields: {
+                            subscribersCount: { $size: "$subscribers" }
+                        }
+                    },
+                    {
+                        $project: {
+                            fullName: 1,
+                            username: 1,
+                            avatar: 1,
+                            subscribersCount: 1
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $unwind: "$channel"
+        },
+        {
+            $project: {
+                channel: 1
+            }
+        }
+    ]);
 
     return res
         .status(200)
-        .json(new ApiResponse(200, channels, "subscribers fethed"))
+        .json(new ApiResponse(200, channels, "subscribers fetched"))
 
 })
 

@@ -12,7 +12,14 @@ const uploadOnCloudinary = async (localFilePath) => {
         if (!localFilePath) return null;
 
         const result = await cloudinary.uploader.upload(localFilePath, {
-            resource_type: "auto"
+            resource_type: "auto",
+            chunk_size: 6000000, // 6MB chunks for large files
+            timeout: 60000, // 60 seconds timeout
+            eager: [
+                { width: 300, height: 300, crop: "pad" },
+                { width: 160, height: 100, crop: "crop", gravity: "south" }
+            ],
+            eager_async: true
         });
 
         // File uploaded successfully

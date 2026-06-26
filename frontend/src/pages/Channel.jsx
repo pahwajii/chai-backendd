@@ -13,8 +13,10 @@ import {
   User,
   Settings,
   Edit,
-  Plus
+  Plus,
+  Trash2
 } from 'lucide-react';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const Channel = () => {
   const { username } = useParams();
@@ -26,6 +28,8 @@ const Channel = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('videos');
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const tabs = [
     { id: 'videos', label: 'Videos', icon: Video, count: videos.length },
@@ -38,41 +42,58 @@ const Channel = () => {
     fetchChannelData();
   }, [username]);
 
+
   const fetchChannelData = async () => {
     try {
-      // Fetch channel info
-      const channelResponse = await fetch(`/api/v1/users/channel/${username}`);
+      const token = localStorage.getItem('accessToken');
+
+      // Fetch channel info - using correct endpoint
+      const channelResponse = await fetch(`${API_BASE_URL}/users/c/${username}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (channelResponse.ok) {
         const channelData = await channelResponse.json();
+        console.log('Channel data received:', channelData);
         setChannel(channelData.data);
+
+        // Set subscription status from API response
+        if (channelData.data.isSubscribed !== undefined) {
+          setIsSubscribed(channelData.data.isSubscribed);
+        }
+
+        // Now fetch videos using the channel ID from the response
+        const videosResponse = await fetch(`${API_BASE_URL}/dashboard/videos/${channelData.data._id}`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        if (videosResponse.ok) {
+          const videosData = await videosResponse.json();
+          console.log('Videos data received:', videosData);
+          setVideos(Array.isArray(videosData.data) ? videosData.data : []);
+        }
+
+        // Fetch playlists - using correct endpoint with user ID
+        const playlistsResponse = await fetch(`${API_BASE_URL}/playlists/user/${channelData.data._id}`);
+        if (playlistsResponse.ok) {
+          const playlistsData = await playlistsResponse.json();
+          console.log('Playlists data received:', playlistsData);
+          setPlaylists(Array.isArray(playlistsData.data) ? playlistsData.data : []);
+        }
+
+        // Fetch subscribed channels - using correct endpoint
+        const subscribedResponse = await fetch(`${API_BASE_URL}/subscriptions/subscriber/${channelData.data._id}`);
+        if (subscribedResponse.ok) {
+          const subscribedData = await subscribedResponse.json();
+          console.log('Subscribed channels data received:', subscribedData);
+          setSubscribedChannels(Array.isArray(subscribedData.data) ? subscribedData.data : []);
+        }
       }
 
-      // Fetch channel videos
-      const videosResponse = await fetch(`/api/v1/dashboard/videos/${channel?.id || username}`);
-      if (videosResponse.ok) {
-        const videosData = await videosResponse.json();
-        setVideos(videosData.data);
-      }
-
-      // Fetch playlists
-      const playlistsResponse = await fetch(`/api/v1/playlists/user/${channel?.id || username}`);
-      if (playlistsResponse.ok) {
-        const playlistsData = await playlistsResponse.json();
-        setPlaylists(playlistsData.data);
-      }
-
-      // Fetch tweets
-      const tweetsResponse = await fetch(`/api/v1/tweets/user/${username}`);
+      // Fetch tweets - using correct endpoint
+      const tweetsResponse = await fetch(`${API_BASE_URL}/tweets/user/${username}`);
       if (tweetsResponse.ok) {
         const tweetsData = await tweetsResponse.json();
-        setTweets(tweetsData.data);
-      }
-
-      // Fetch subscribed channels
-      const subscribedResponse = await fetch(`/api/v1/subscriptions/subscriber/${channel?.id || username}`);
-      if (subscribedResponse.ok) {
-        const subscribedData = await subscribedResponse.json();
-        setSubscribedChannels(subscribedData.data);
+        console.log('Tweets data received:', tweetsData);
+        setTweets(Array.isArray(tweetsData.data) ? tweetsData.data : []);
       }
 
     } catch (error) {
@@ -82,26 +103,78 @@ const Channel = () => {
     }
   };
 
+
   const handleSubscribe = async () => {
     try {
-      const response = await fetch(`/api/v1/subscriptions/toggle/${channel?.id}`, {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        console.error('You must be logged in to subscribe');
+        return;
+      }
+
+      console.log('Toggling subscription for channel:', channel?._id);
+
+      const response = await fetch(`${API_BASE_URL}/subscriptions/toggle/${channel?._id}`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      console.log('Subscribe API response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Subscribe response:', data);
+
+        // Toggle subscription state
+        setIsSubscribed(!isSubscribed);
+
+        // Update subscriber count - we need to recalculate it
+        // For now, just toggle locally, but ideally we'd refetch the channel data
+        setChannel(prev => ({
+          ...prev,
+          subscribersCount: prev.subscribersCount + (isSubscribed ? -1 : 1)
+        }));
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to toggle subscription:', response.status, errorText);
+      }
+    } catch (error) {
+      console.error('Error toggling subscription:', error);
+    }
+  };
+
+  const handleDeleteVideo = async (videoId) => {
+    try {
+      setDeleting(true);
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        console.error('You must be logged in to delete videos');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/videos/${videoId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
       });
       
       if (response.ok) {
-        setIsSubscribed(!isSubscribed);
-        // Update subscriber count
-        setChannel(prev => ({
-          ...prev,
-          subscribersCount: prev.subscribersCount + (isSubscribed ? -1 : 1)
-        }));
+        // Remove video from local state
+        setVideos(prev => prev.filter(video => video._id !== videoId));
+        setDeleteConfirm(null);
+        console.log('Video deleted successfully');
+      } else {
+        const errorData = await response.json();
+        console.error('Error deleting video:', errorData.message);
       }
     } catch (error) {
-      console.error('Error toggling subscription:', error);
+      console.error('Error deleting video:', error);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -126,9 +199,10 @@ const Channel = () => {
   };
 
   const formatDuration = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
+    const numSeconds = Number(seconds) || 0;
+    const hours = Math.floor(numSeconds / 3600);
+    const minutes = Math.floor((numSeconds % 3600) / 60);
+    const secs = Math.floor(numSeconds % 60);
     
     if (hours > 0) {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
@@ -186,7 +260,7 @@ const Channel = () => {
               <div className="flex items-center space-x-4 mt-2 text-sm text-gray-400">
                 <div className="flex items-center space-x-1">
                   <Users className="w-4 h-4" />
-                  <span>{formatViews(channel.subscribersCount || 0)} Subscribers</span>
+                  <span>{formatViews(channel.subscriberscount || 0)} Subscribers</span>
                 </div>
                 <span>•</span>
                 <div className="flex items-center space-x-1">
@@ -257,38 +331,54 @@ const Channel = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {videos.map((video) => (
-                    <Link
-                      key={video._id}
-                      to={`/video/${video._id}`}
-                      className="group cursor-pointer"
-                    >
-                      <div className="relative overflow-hidden rounded-2xl">
-                        <img
-                          src={video.thumbnail?.url}
-                          alt={video.title}
-                          className="w-full aspect-video object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                        <div className="absolute bottom-3 right-3 bg-black/80 text-white text-sm px-2 py-1 rounded-lg backdrop-blur-sm">
-                          {formatDuration(video.duration)}
-                        </div>
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 rounded-2xl flex items-center justify-center">
-                          <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 transform scale-75 group-hover:scale-100">
-                            <Play className="w-8 h-8 text-black ml-1" />
+                  {Array.isArray(videos) && videos.map((video) => (
+                    <div key={video._id} className="group relative">
+                      <Link
+                        to={`/video/${video._id}`}
+                        className="block cursor-pointer"
+                      >
+                        <div className="relative overflow-hidden rounded-2xl">
+                          <img
+                            src={video.thumbnail?.url}
+                            alt={video.title}
+                            className="w-full aspect-video object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                          <div className="absolute bottom-3 right-3 bg-black/80 text-white text-sm px-2 py-1 rounded-lg backdrop-blur-sm">
+                            {formatDuration(video.duration)}
+                          </div>
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 rounded-2xl flex items-center justify-center">
+                            <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 transform scale-75 group-hover:scale-100">
+                              <Play className="w-8 h-8 text-black ml-1" />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="mt-4">
-                        <h3 className="font-semibold text-white line-clamp-2 group-hover:text-purple-400 transition-colors text-lg mb-2">
-                          {video.title}
-                        </h3>
-                        <div className="flex items-center space-x-3 text-sm text-gray-400">
-                          <span>{formatViews(video.views)} views</span>
-                          <span>•</span>
-                          <span>{formatDate(video.createdAt)}</span>
+                        <div className="mt-4">
+                          <h3 className="font-semibold text-white line-clamp-2 group-hover:text-purple-400 transition-colors text-lg mb-2">
+                            {video.title}
+                          </h3>
+                          <div className="flex items-center space-x-3 text-sm text-gray-400">
+                            <span>{formatViews(video.views)} views</span>
+                            <span>•</span>
+                            <span>{formatDate(video.createdAt)}</span>
+                          </div>
                         </div>
-                      </div>
-                    </Link>
+                      </Link>
+                      
+                      {/* Delete Button - Only show for video owner */}
+                      {channel && channel._id === video.owner?._id && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setDeleteConfirm(video);
+                          }}
+                          className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-600 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 backdrop-blur-sm"
+                          title="Delete video"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -305,15 +395,25 @@ const Channel = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {playlists.map((playlist) => (
+                  {Array.isArray(playlists) && playlists.map((playlist) => (
                     <Link
                       key={playlist._id}
                       to={`/playlist/${playlist._id}`}
                       className="group cursor-pointer"
                     >
                       <div className="bg-dark-800 rounded-2xl overflow-hidden hover:bg-dark-700 transition-colors">
-                        <div className="aspect-video bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
-                          <Folder className="w-16 h-16 text-purple-400" />
+                        <div className="aspect-video relative">
+                          {playlist.videos && playlist.videos.length > 0 && playlist.videos[0]?.thumbnail?.url ? (
+                            <img
+                              src={playlist.videos[0].thumbnail.url}
+                              alt={playlist.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
+                              <Folder className="w-12 h-12 text-white" />
+                            </div>
+                          )}
                         </div>
                         <div className="p-4">
                           <h3 className="font-semibold text-white group-hover:text-purple-400 transition-colors mb-2">
@@ -346,7 +446,7 @@ const Channel = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {tweets.map((tweet) => (
+                  {Array.isArray(tweets) && tweets.map((tweet) => (
                     <div key={tweet._id} className="bg-dark-800 rounded-2xl p-6">
                       <div className="flex items-start space-x-4">
                         <img
@@ -391,27 +491,27 @@ const Channel = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {subscribedChannels.map((subscribedChannel) => (
+                  {Array.isArray(subscribedChannels) && subscribedChannels.map((subscription) => (
                     <Link
-                      key={subscribedChannel._id}
-                      to={`/channel/${subscribedChannel.username}`}
+                      key={subscription._id}
+                      to={`/channel/${subscription.channel?.username}`}
                       className="group cursor-pointer"
                     >
                       <div className="bg-dark-800 rounded-2xl p-6 hover:bg-dark-700 transition-colors">
                         <div className="flex items-center space-x-4">
                           <img
-                            src={subscribedChannel.avatar?.url || '/default-avatar.png'}
-                            alt={subscribedChannel.fullName}
+                            src={subscription.channel?.avatar?.url || '/default-avatar.png'}
+                            alt={subscription.channel?.fullName}
                             className="w-16 h-16 rounded-full"
                           />
                           <div>
                             <h3 className="font-semibold text-white group-hover:text-purple-400 transition-colors">
-                              {subscribedChannel.fullName}
+                              {subscription.channel?.fullName}
                             </h3>
-                            <p className="text-gray-400">@{subscribedChannel.username}</p>
+                            <p className="text-gray-400">@{subscription.channel?.username}</p>
                             <div className="flex items-center space-x-2 text-sm text-gray-400 mt-1">
                               <Users className="w-4 h-4" />
-                              <span>{formatViews(subscribedChannel.subscribersCount || 0)} subscribers</span>
+                              <span>{formatViews(subscription.channel?.subscribersCount || 0)} subscribers</span>
                             </div>
                           </div>
                         </div>
@@ -424,6 +524,57 @@ const Channel = () => {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-dark-800 rounded-2xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-12 h-12 bg-red-600/20 rounded-full flex items-center justify-center">
+                <Trash2 className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-white">Delete Video</h3>
+                <p className="text-gray-400">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-300 mb-2">Are you sure you want to delete this video?</p>
+              <div className="bg-dark-700 rounded-lg p-3">
+                <h4 className="text-white font-medium">{deleteConfirm.title}</h4>
+                <p className="text-gray-400 text-sm mt-1">
+                  {formatViews(deleteConfirm.views)} views • {formatDate(deleteConfirm.createdAt)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteVideo(deleteConfirm._id)}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
+              >
+                {deleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete Video'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

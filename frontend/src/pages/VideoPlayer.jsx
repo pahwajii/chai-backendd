@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchVideoById, likeVideo } from '../store/slices/videoSlice';
+import { fetchVideoById, likeVideo, dislikeVideo } from '../store/slices/videoSlice';
 import { 
   ThumbsUp, 
   ThumbsDown, 
@@ -20,7 +20,9 @@ const VideoPlayer = () => {
   const { currentVideo, loading, error } = useSelector((state) => state.video);
   const { isAuthenticated } = useSelector((state) => state.auth);
   const [isLiked, setIsLiked] = useState(false);
+  const [isDisliked, setIsDisliked] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
+  const [shareMessage, setShareMessage] = useState('');
 
   useEffect(() => {
     if (videoId) {
@@ -32,6 +34,15 @@ const VideoPlayer = () => {
     if (isAuthenticated) {
       dispatch(likeVideo(videoId));
       setIsLiked(!isLiked);
+      if (isDisliked) setIsDisliked(false);
+    }
+  };
+
+  const handleDislike = () => {
+    if (isAuthenticated) {
+      dispatch(dislikeVideo(videoId));
+      setIsDisliked(!isDisliked);
+      if (isLiked) setIsLiked(false);
     }
   };
 
@@ -51,6 +62,50 @@ const VideoPlayer = () => {
       month: 'long',
       day: 'numeric'
     });
+  };
+
+  const handleShare = async () => {
+    try {
+      const videoUrl = `${window.location.origin}/video/${videoId}`;
+      
+      // Try to use the modern Clipboard API first
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(videoUrl);
+        setShareMessage('Link copied to clipboard!');
+      } else {
+        // Fallback for older browsers or non-secure contexts
+        const textArea = document.createElement('textarea');
+        textArea.value = videoUrl;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+          document.execCommand('copy');
+          setShareMessage('Link copied to clipboard!');
+        } catch (err) {
+          console.error('Failed to copy text: ', err);
+          setShareMessage('Failed to copy link');
+        }
+        
+        document.body.removeChild(textArea);
+      }
+      
+      // Clear the message after 3 seconds
+      setTimeout(() => {
+        setShareMessage('');
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error sharing video:', error);
+      setShareMessage('Failed to copy link');
+      setTimeout(() => {
+        setShareMessage('');
+      }, 3000);
+    }
   };
 
   if (loading) {
@@ -114,20 +169,36 @@ const VideoPlayer = () => {
               <div className="flex items-center space-x-2">
                 <button
                   onClick={handleLike}
+                  disabled={isDisliked}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-full transition-colors ${
                     isLiked
                       ? 'bg-primary-600 text-white'
+                      : isDisliked
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-50'
                       : 'bg-dark-700 text-white hover:bg-dark-600'
                   }`}
                 >
                   <ThumbsUp className="w-4 h-4" />
                   <span>Like</span>
                 </button>
-                <button className="flex items-center space-x-2 px-4 py-2 bg-dark-700 text-white rounded-full hover:bg-dark-600 transition-colors">
+                <button
+                  onClick={handleDislike}
+                  disabled={isLiked}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-full transition-colors ${
+                    isDisliked
+                      ? 'bg-red-600 text-white'
+                      : isLiked
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-50'
+                      : 'bg-dark-700 text-white hover:bg-dark-600'
+                  }`}
+                >
                   <ThumbsDown className="w-4 h-4" />
                   <span>Dislike</span>
                 </button>
-                <button className="flex items-center space-x-2 px-4 py-2 bg-dark-700 text-white rounded-full hover:bg-dark-600 transition-colors">
+                <button
+                  onClick={handleShare}
+                  className="flex items-center space-x-2 px-4 py-2 bg-dark-700 text-white rounded-full hover:bg-dark-600 transition-colors"
+                >
                   <Share className="w-4 h-4" />
                   <span>Share</span>
                 </button>
@@ -218,6 +289,13 @@ const VideoPlayer = () => {
           </div>
         </div>
       </div>
+
+      {/* Share Message Notification */}
+      {shareMessage && (
+        <div className="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in">
+          {shareMessage}
+        </div>
+      )}
     </div>
   );
 };

@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { 
+import {
     toggleVideoLike,
     toggleCommentLike,
     toggleTweetLike,
-    getLikedVideos
+    getLikedVideos,
+    getTweetLikesCountByUsers
 } from "../controllers/like.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -20,5 +21,8 @@ router.route("/toggle/t/:tweetId").post(verifyJWT, toggleTweetLike);
 
 // Get liked videos (protected route)
 router.route("/liked-videos").get(verifyJWT, getLikedVideos);
+
+// Get tweet likes count by users
+router.route("/tweet-likes-count").get(getTweetLikesCountByUsers);
 
 export default router;

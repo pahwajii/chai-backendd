@@ -70,9 +70,7 @@ const Register = () => {
       <div className="max-w-md w-full space-y-8">
         <div>
           <div className="flex justify-center">
-            <div className="w-12 h-12 bg-primary-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">YT</span>
-            </div>
+            <img src="/feedflow2.png" alt="FeedTube" className="w-14 h-14 rounded-lg" />
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
             Create your account

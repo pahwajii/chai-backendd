@@ -18,6 +18,9 @@ const LikedVideos = () => {
   }, [dispatch, isAuthenticated]);
 
   const formatViews = (views) => {
+    if (!views || views === undefined || views === null) {
+      return '0';
+    }
     if (views >= 1000000) {
       return `${(views / 1000000).toFixed(1)}M`;
     } else if (views >= 1000) {
@@ -27,22 +30,30 @@ const LikedVideos = () => {
   };
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 1) return '1 day ago';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-    return `${Math.floor(diffDays / 365)} years ago`;
+    if (!dateString) return 'Unknown';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Unknown';
+      
+      const now = new Date();
+      const diffTime = Math.abs(now - date);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 1) return '1 day ago';
+      if (diffDays < 7) return `${diffDays} days ago`;
+      if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+      if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+      return `${Math.floor(diffDays / 365)} years ago`;
+    } catch (error) {
+      return 'Unknown';
+    }
   };
 
   const formatDuration = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    const numSeconds = Number(seconds) || 0;
+    const hours = Math.floor(numSeconds / 3600);
+    const minutes = Math.floor((numSeconds % 3600) / 60);
+    const secs = Math.floor(numSeconds % 60);
     
     if (hours > 0) {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
@@ -165,7 +176,12 @@ const LikedVideos = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {processedVideos.map((like) => (
+          {processedVideos.map((like) => {
+            if (!like || !like.video) {
+              console.warn('Invalid like object:', like);
+              return null;
+            }
+            return (
             <Link
               key={like._id}
               to={`/video/${like.video?._id}`}
@@ -193,13 +209,13 @@ const LikedVideos = () => {
                   {like.video?.title}
                 </h3>
                 <div className="flex items-center space-x-2 mt-1 text-sm text-gray-400">
-                  <Link
-                    to={`/channel/${like.video?.owner?.username}`}
-                    className="hover:text-primary-400 transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  <span className="hover:text-primary-400 transition-colors cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.location.href = `/channel/${like.video?.owner?.username}`;
+                        }}>
                     {like.video?.owner?.username}
-                  </Link>
+                  </span>
                   <span>•</span>
                   <div className="flex items-center space-x-1">
                     <Eye className="w-4 h-4" />
@@ -216,7 +232,8 @@ const LikedVideos = () => {
                 </p>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

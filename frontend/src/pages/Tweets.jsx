@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchTweets, createTweet, deleteTweet, likeTweet } from '../store/slices/tweetSlice';
-import { 
-  MessageCircle, 
-  Heart, 
-  Trash2, 
-  Edit3, 
+import { fetchTweets, createTweet, deleteTweet, likeTweet, fetchTweetComments, addTweetComment } from '../store/slices/tweetSlice';
+import {
+  MessageCircle,
+  Heart,
+  Trash2,
+  Edit3,
   Send,
   User,
   Clock
@@ -13,11 +13,13 @@ import {
 
 const Tweets = () => {
   const dispatch = useDispatch();
-  const { tweets, loading, error } = useSelector((state) => state.tweet);
+  const { tweets, loading, error, comments } = useSelector((state) => state.tweet);
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const [newTweet, setNewTweet] = useState('');
   const [editingTweet, setEditingTweet] = useState(null);
   const [editContent, setEditContent] = useState('');
+  const [showComments, setShowComments] = useState({});
+  const [newComments, setNewComments] = useState({});
 
   useEffect(() => {
     if (isAuthenticated && user?.username) {
@@ -73,6 +75,30 @@ const Tweets = () => {
   const handleCancelEdit = () => {
     setEditingTweet(null);
     setEditContent('');
+  };
+
+  const handleToggleComments = async (tweetId) => {
+    if (showComments[tweetId]) {
+      setShowComments(prev => ({ ...prev, [tweetId]: false }));
+    } else {
+      setShowComments(prev => ({ ...prev, [tweetId]: true }));
+      // Fetch comments if not already loaded
+      if (!comments[tweetId]) {
+        await dispatch(fetchTweetComments({ tweetId }));
+      }
+    }
+  };
+
+  const handleAddComment = async (tweetId) => {
+    const content = (newComments[tweetId] || '').trim();
+    if (content) {
+      await dispatch(addTweetComment({ tweetId, content }));
+      setNewComments(prev => ({ ...prev, [tweetId]: '' }));
+      // Refresh tweets to get updated comment count
+      if (user?.username) {
+        dispatch(fetchTweets(user.username));
+      }
+    }
   };
 
   const formatDate = (dateString) => {
@@ -214,10 +240,18 @@ const Tweets = () => {
                         <div className="flex items-center space-x-6">
                           <button
                             onClick={() => handleLikeTweet(tweet._id)}
-                            className="flex items-center space-x-2 text-gray-400 hover:text-primary-400 transition-colors"
+                            className="flex items-center space-x-2 text-gray-400 hover:text-red-400 transition-colors"
                           >
                             <Heart className="w-4 h-4" />
-                            <span>Like</span>
+                            <span>{tweet.likesCount || 0}</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleToggleComments(tweet._id)}
+                            className="flex items-center space-x-2 text-gray-400 hover:text-blue-400 transition-colors"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                            <span>{tweet.commentsCount || 0}</span>
                           </button>
                         </div>
                         
@@ -238,6 +272,62 @@ const Tweets = () => {
                           </div>
                         )}
                       </div>
+
+                      {/* Comments Section */}
+                      {showComments[tweet._id] && (
+                        <div className="mt-4 border-t border-gray-700 pt-4">
+                          <div className="flex space-x-3 mb-4">
+                            <img
+                              src={user?.avatar?.url || '/default-avatar.png'}
+                              alt={user?.fullName}
+                              className="w-8 h-8 rounded-full"
+                            />
+                            <div className="flex-1 flex space-x-2">
+                              <input
+                                type="text"
+                                value={newComments[tweet._id] || ''}
+                                onChange={(e) => setNewComments(prev => ({ ...prev, [tweet._id]: e.target.value }))}
+                                placeholder="Write a comment..."
+                                className="flex-1 bg-dark-700 text-white placeholder-gray-400 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              />
+                              {(newComments[tweet._id] || '').trim() && (
+                                <button
+                                  onClick={() => handleAddComment(tweet._id)}
+                                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-full transition-colors"
+                                >
+                                  <Send className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Comments List */}
+                          <div className="space-y-3">
+                            {(comments[tweet._id] || []).map((comment) => (
+                              <div key={comment._id} className="flex space-x-3">
+                                <img
+                                  src={comment.owner?.avatar?.url || '/default-avatar.png'}
+                                  alt={comment.owner?.fullName}
+                                  className="w-6 h-6 rounded-full"
+                                />
+                                <div className="flex-1">
+                                  <div className="bg-dark-700 rounded-lg px-3 py-2">
+                                    <div className="flex items-center space-x-2 mb-1">
+                                      <span className="font-medium text-white text-sm">
+                                        {comment.owner?.fullName}
+                                      </span>
+                                      <span className="text-gray-400 text-xs">
+                                        @{comment.owner?.username}
+                                      </span>
+                                    </div>
+                                    <p className="text-gray-300 text-sm">{comment.content}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

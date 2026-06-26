@@ -1,13 +1,17 @@
 import { Router } from "express";
-import { 
+import {
     createTweet,
     getUserTweets,
+    getAllTweets,
     updateTweet,
     deleteTweet
 } from "../controllers/tweet.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router();
+
+// Get all tweets (public route)
+router.route("/all").get(getAllTweets);
 
 // Create tweet (protected route)
 router.route("/").post(verifyJWT, createTweet);

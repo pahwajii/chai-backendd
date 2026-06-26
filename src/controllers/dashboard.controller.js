@@ -2,6 +2,7 @@ import mongoose from "mongoose"
 import {Video} from "../models/video.model.js"
 import {Subscription} from "../models/subscription.model.js"
 import {Like} from "../models/like.model.js"
+import {User} from "../models/user.model.js"
 import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
@@ -33,6 +34,14 @@ const getChannelStats = asyncHandler(async (req, res) => {
                 localField:"_id",
                 foreignField:"channel",
                 as:"subscribers"
+            }
+        },
+        {
+            $lookup:{
+                from:"likes",
+                localField:"allVideos._id",
+                foreignField:"video",
+                as:"allLikes"
             }
         },
         {
@@ -92,13 +101,12 @@ const getChannelVideos = asyncHandler(async (req, res) => {
     .populate("owner","username avatar")
     .select("title description thumbnail views likes createdAt")
 
-    if(!videos.length){
-        throw new ApiError(404,"No videos found for this channel")
-    }
+    console.log(`Found ${videos.length} videos for channel ${channelID}`);
+    console.log('Videos:', videos);
 
     return res 
     .status(200)
-    .json(new ApiResponse(200,"channel videosfetched successfully",videos))
+    .json(new ApiResponse(200, videos, "channel videos fetched successfully"))
 
 })
 

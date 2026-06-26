@@ -1,26 +1,17 @@
 import mongoose from "mongoose"
 import {Tweet} from "../models/tweet.model.js"
 import {User} from "../models/user.model.js"
+import {Like} from "../models/like.model.js"
+import {Comment} from "../models/comment.model.js"
 import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
 
 const createTweet = asyncHandler(async (req, res) => {
     //TODO: create tweet
-    /**
-Get content from request body → const { content } = req.body;
-
-Validate → if content is empty, throw an error.
-
-Use logged-in user → req.user._id as owner.
-
-Create new document → Tweet.create({ content, owner }).
-
-Handle failure → if creation fails, throw error.
-
-Send response → res.status(201).json(new ApiResponse(...)).
-     */
     const {content} = req.body
+    console.log('createTweet called with content:', content, 'user:', req.user?._id);
+
     if (!content || content.trim() === "") {
         throw new ApiError(400, "Tweet content is required");
     }
@@ -31,9 +22,11 @@ Send response → res.status(201).json(new ApiResponse(...)).
     }
 
     const tweet = await Tweet.create({
-        content,
+        content: content.trim(),
         owner
     })
+
+    console.log('Tweet created:', tweet._id, 'owner:', tweet.owner);
 
     if(!tweet){
         throw new ApiError(401,"tweet not created")
@@ -46,22 +39,18 @@ Send response → res.status(201).json(new ApiResponse(...)).
 })
 
 const getUserTweets = asyncHandler(async (req, res) => {
-    /*
-    const { userId } = req.params;
-    const { page = 1, limit = 10 } = req.query;
-
-    const tweets = await Tweet.find({ owner: userId })
-    .sort({ createdAt: -1 })
-    .skip((page - 1) * limit)
-    .limit(Number(limit)); */
     // TODO: get user tweets
     const { username } = req.params;
+
+    console.log('getUserTweets called with username:', username);
 
     if (!username?.trim()) {
         throw new ApiError(400, "Username is missing");
     }
 
     const user = await User.findOne({ username: username.trim().toLowerCase() });
+    console.log('User found:', user ? user._id : 'null');
+
     if (!user) {
         throw new ApiError(404, "User not found");
     }
@@ -69,9 +58,24 @@ const getUserTweets = asyncHandler(async (req, res) => {
     const tweets = await Tweet.find({ owner: user._id })
         .sort({ createdAt: -1 }); // newest first
 
+    // Add likes and comments count to each tweet
+    const tweetsWithCounts = await Promise.all(
+        tweets.map(async (tweet) => {
+            const likesCount = await Like.countDocuments({ tweet: tweet._id });
+            const commentsCount = await Comment.countDocuments({ tweet: tweet._id });
+            return {
+                ...tweet.toObject(),
+                likesCount,
+                commentsCount
+            };
+        })
+    );
+
+    console.log('Tweets found:', tweetsWithCounts.length, 'for user:', user._id);
+
     return res
         .status(200)
-        .json(new ApiResponse(200, tweets, "User tweets fetched successfully"));
+        .json(new ApiResponse(200, tweetsWithCounts, "User tweets fetched successfully"));
 });
 
 
@@ -106,6 +110,44 @@ const updateTweet = asyncHandler(async (req, res) => {
 
 })
 
+const getAllTweets = asyncHandler(async (req, res) => {
+    // Get all tweets for public feed
+    const { page = 1, limit = 10 } = req.query;
+
+    const tweets = await Tweet.find({})
+        .populate("owner", "username fullName avatar")
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * parseInt(limit))
+        .limit(parseInt(limit));
+
+    // Add likes and comments count to each tweet
+    const tweetsWithCounts = await Promise.all(
+        tweets.map(async (tweet) => {
+            const likesCount = await Like.countDocuments({ tweet: tweet._id });
+            const commentsCount = await Comment.countDocuments({ tweet: tweet._id });
+            return {
+                ...tweet.toObject(),
+                likesCount,
+                commentsCount
+            };
+        })
+    );
+
+    const totalTweets = await Tweet.countDocuments();
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, {
+            tweets: tweetsWithCounts,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalTweets,
+                totalPages: Math.ceil(totalTweets / parseInt(limit))
+            }
+        }, "All tweets fetched successfully"));
+});
+
 const deleteTweet = asyncHandler(async (req, res) => {
     //TODO: delete tweet
     const { tweetID } = req.params;
@@ -136,6 +178,7 @@ const deleteTweet = asyncHandler(async (req, res) => {
 export {
     createTweet,
     getUserTweets,
+    getAllTweets,
     updateTweet,
     deleteTweet
 }

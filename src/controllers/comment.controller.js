@@ -1,5 +1,6 @@
-import mongoose, { mongo } from "mongoose"
+ import mongoose, { mongo } from "mongoose"
 import {Comment} from "../models/comment.model.js"
+import {Tweet} from "../models/tweet.model.js"
 import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
@@ -82,7 +83,7 @@ const getVideoComments = asyncHandler(async (req, res) => {
     // Send success response with paginated comments
     return res
         .status(200)
-        .json(new ApiResponse(200, "Video comments fetched successfully", comments));
+        .json(new ApiResponse(200, comments, "Video comments fetched successfully"));
 })
 
 const addComment = asyncHandler(async (req, res) => {
@@ -105,9 +106,42 @@ const addComment = asyncHandler(async (req, res) => {
     if(!newComment){
         throw new ApiError(500,"Failed to add comment")
     }
-    return res 
+
+    // Populate the comment with owner details using aggregation pipeline
+    const populatedComment = await Comment.aggregate([
+        {
+            $match: { _id: newComment._id }
+        },
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
+                pipeline: [
+                    { $project: { username: 1, avatar: 1, fullName: 1 } }
+                ]
+            }
+        },
+        { $unwind: "$owner" },
+        {
+            $project: {
+                content: 1,
+                video: 1,
+                owner: {
+                    _id: "$owner._id",
+                    username: "$owner.username",
+                    avatar: "$owner.avatar",
+                    fullName: "$owner.fullName"
+                },
+                createdAt: 1
+            }
+        }
+    ]);
+
+    return res
     .status(200)
-    .json(new ApiResponse(200,"Comment added successfully",newComment))
+    .json(new ApiResponse(200, populatedComment[0], "Comment added successfully"))
 })
 
 const updateComment = asyncHandler(async (req, res) => {
@@ -146,8 +180,8 @@ const updateComment = asyncHandler(async (req, res) => {
         )
     
         return res
-        .status(200)
-        .json(new ApiResponse(200,comment,"comment updated succesfully"))
+    .status(200)
+    .json(new ApiResponse(200, comment, "comment updated successfully"))
 })
 
 const deleteComment = asyncHandler(async (req, res) => {
@@ -182,9 +216,151 @@ const deleteComment = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, {}, "comment deleted successfully"))
 })
 
+const getTweetComments = asyncHandler(async (req, res) => {
+    const { tweetId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    // Validate tweet ID
+    if (!mongoose.Types.ObjectId.isValid(tweetId)) {
+        throw new ApiError(400, "Invalid tweet ID");
+    }
+
+    // Build aggregation pipeline
+    const pipeline = [
+        {
+            // Match comments for the given tweet
+            $match: {
+                tweet: new mongoose.Types.ObjectId(tweetId)
+            }
+        },
+        {
+            // Lookup comment owner details from users collection
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
+                pipeline: [
+                    { $project: { username: 1, avatar: 1, fullName: 1 } } // only select needed fields
+                ]
+            }
+        },
+        { $unwind: "$owner" },
+        {
+            // Add convenient fields for frontend
+            $addFields: {
+                ownerName: "$owner.username",
+                ownerAvatar: "$owner.avatar",
+                ownerFullName: "$owner.fullName"
+            }
+        },
+        {
+            // Project the final structure of each comment
+            $project: {
+                content: 1,
+                tweet: 1,
+                owner: {
+                    _id: "$owner._id",
+                    username: "$owner.username",
+                    avatar: "$owner.avatar",
+                    fullName: "$owner.fullName"
+                },
+                createdAt: 1
+            }
+        },
+        { $sort: { createdAt: -1 } }
+    ];
+
+    // Pagination options
+    const options = {
+        page: parseInt(page),
+        limit: parseInt(limit)
+    };
+
+    // Execute paginated aggregation
+    const comments = await Comment.aggregatePaginate(Comment.aggregate(pipeline), options);
+
+    // If no comments found, return 404
+    if (!comments.docs.length) {
+        throw new ApiError(404, "No comments found for this tweet");
+    }
+
+    // Send success response with paginated comments
+    return res
+        .status(200)
+        .json(new ApiResponse(200, comments, "Tweet comments fetched successfully"));
+});
+
+const addTweetComment = asyncHandler(async (req, res) => {
+    // TODO: add a comment to a tweet
+    const { tweetId } = req.params;
+    const { content } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(tweetId)) {
+        throw new ApiError(400, "Invalid tweet ID");
+    }
+    if(!content){
+        throw new ApiError(400,"Comment content is required")
+    }
+
+    // Check if tweet exists
+    const tweet = await Tweet.findById(tweetId);
+    if (!tweet) {
+        throw new ApiError(404, "Tweet not found");
+    }
+
+    const newComment = await Comment.create({
+        content,
+        tweet: tweetId,
+        owner: req.user._id
+    });
+
+    if(!newComment){
+        throw new ApiError(500,"Failed to add comment")
+    }
+
+    // Populate the comment with owner details using aggregation pipeline
+    const populatedComment = await Comment.aggregate([
+        {
+            $match: { _id: newComment._id }
+        },
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
+                pipeline: [
+                    { $project: { username: 1, avatar: 1, fullName: 1 } }
+                ]
+            }
+        },
+        { $unwind: "$owner" },
+        {
+            $project: {
+                content: 1,
+                tweet: 1,
+                owner: {
+                    _id: "$owner._id",
+                    username: "$owner.username",
+                    avatar: "$owner.avatar",
+                    fullName: "$owner.fullName"
+                },
+                createdAt: 1
+            }
+        }
+    ]);
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200, populatedComment[0], "Comment added successfully"))
+});
+
 export {
-    getVideoComments, 
-    addComment, 
+    getVideoComments,
+    getTweetComments,
+    addComment,
+    addTweetComment,
     updateComment,
     deleteComment
     }

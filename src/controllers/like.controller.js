@@ -1,9 +1,12 @@
 import mongoose, {isValidObjectId} from "mongoose"
 import {Like} from "../models/like.model.js"
+import {Dislike} from "../models/dislike.model.js"
+import {Tweet} from "../models/tweet.model.js"
 import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
 import { Video } from "../models/video.model.js"
+import { Comment } from "../models/comment.model.js"
 
 const toggleVideoLike = asyncHandler(async (req, res) => {
     const {videoId} = req.params
@@ -35,13 +38,26 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
             video :videoId,
             likedBy:req.user._id
         })
+        
+        // Remove dislike if it exists (mutual exclusivity)
+        const existingDislike = await Dislike.findOne({
+            video: videoId,
+            dislikedBy: req.user._id
+        })
+        if(existingDislike){
+            await Dislike.findByIdAndDelete(existingDislike._id)
+        }
+        
         message = "Video liked successfully"
     }
 
     const totalLikes = await Like.countDocuments({ video: videoId })
+    const totalDislikes = await Dislike.countDocuments({ video: videoId })
 
-
-    res.status(200).json(new ApiResponse(200,{totalLikes},message))
+    res.status(200).json(new ApiResponse(200,{
+        totalLikes,
+        totalDislikes
+    },message))
 })
 
 const toggleCommentLike = asyncHandler(async (req, res) => {
@@ -75,15 +91,29 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
             comment: commentId,
             likedBy: req.user._id
         })
+        
+        // Remove dislike if it exists (mutual exclusivity)
+        const existingDislike = await Dislike.findOne({
+            comment: commentId,
+            dislikedBy: req.user._id
+        })
+        if(existingDislike){
+            await Dislike.findByIdAndDelete(existingDislike._id)
+        }
+        
         message = "Comment liked successfully"
     }
 
-    // 5. Count total likes for this comment
+    // 5. Count total likes and dislikes for this comment
     const totalLikes = await Like.countDocuments({ comment: commentId })
+    const totalDislikes = await Dislike.countDocuments({ comment: commentId })
 
     // 6. Send response
     return res.status(200).json(
-        new ApiResponse(200, { totalLikes }, message)
+        new ApiResponse(200, {
+            totalLikes,
+            totalDislikes
+        }, message)
     )
 })
 
@@ -114,15 +144,33 @@ const toggleTweetLike = asyncHandler(async (req, res) => {
             tweet: tweetId,
             likedBy: req.user._id
         })
+        
+        // Remove dislike if it exists (mutual exclusivity)
+        const existingDislike = await Dislike.findOne({
+            tweet: tweetId,
+            dislikedBy: req.user._id
+        })
+        if(existingDislike){
+            await Dislike.findByIdAndDelete(existingDislike._id)
+        }
+        
         message = "Tweet liked successfully"
     }
 
-    res.status(200).json(new ApiResponse(200, message))
+    const totalLikes = await Like.countDocuments({ tweet: tweetId })
+    const totalDislikes = await Dislike.countDocuments({ tweet: tweetId })
+
+    res.status(200).json(new ApiResponse(200, {
+        totalLikes,
+        totalDislikes
+    }, message))
 })
 
 const getLikedVideos = asyncHandler(async (req, res) => {
     //TODO: get all liked videos
-    
+
+    console.log('getLikedVideos called for user:', req.user._id);
+
     const likedVideos = await Like.find({
         likedBy:req.user._id,
         video:{$ne:null}
@@ -132,19 +180,48 @@ const getLikedVideos = asyncHandler(async (req, res) => {
     })
     .populate({
         path: "video",
-        select: "title thumbnail",
+        select: "title thumbnail duration views createdAt",
         populate: {
         path: "owner",
         select: "username fullName"
     }
     })
+    .sort({ createdAt: -1 }); // Most recent likes first
 
-    res.status(200).json(new ApiResponse(200, likedVideos))
+    console.log('Raw liked videos count:', likedVideos.length);
+
+    // Filter out any null videos and ensure uniqueness
+    const uniqueLikedVideos = [];
+    const seenVideoIds = new Set();
+
+    for (const like of likedVideos) {
+        if (like.video && like.video._id && !seenVideoIds.has(like.video._id.toString())) {
+            seenVideoIds.add(like.video._id.toString());
+            uniqueLikedVideos.push(like);
+        }
+    }
+
+    console.log('Unique liked videos count:', uniqueLikedVideos.length);
+
+    res.status(200).json(new ApiResponse(200, uniqueLikedVideos))
 })
+
+const getTweetLikesCountByUsers = asyncHandler(async (req, res) => {
+    const likesCount = await Like.aggregate([
+        { $match: { tweet: { $ne: null } } },
+        { $group: { _id: "$likedBy", count: { $sum: 1 } } },
+        { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "user" } },
+        { $unwind: "$user" },
+        { $project: { _id: 0, user: { username: 1, fullName: 1 }, count: 1 } }
+    ]);
+
+    res.status(200).json(new ApiResponse(200, likesCount, "Tweet likes count by users fetched successfully"));
+});
 
 export {
     toggleCommentLike,
     toggleTweetLike,
     toggleVideoLike,
-    getLikedVideos
+    getLikedVideos,
+    getTweetLikesCountByUsers
 }

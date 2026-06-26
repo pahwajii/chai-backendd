@@ -15,12 +15,15 @@ import {
 } from 'lucide-react';
 import { getCurrentUser } from '../store/slices/authSlice';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const Playlists = () => {
   const dispatch = useDispatch();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const [playlists, setPlaylists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editingPlaylist, setEditingPlaylist] = useState(null);
   const [newPlaylist, setNewPlaylist] = useState({
     name: '',
     description: '',
@@ -36,7 +39,7 @@ const Playlists = () => {
   const fetchPlaylists = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8000/api/v1/playlists/user/${user?._id}`, {
+      const response = await fetch(`${API_BASE_URL}/playlists/user/${user?._id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -53,11 +56,19 @@ const Playlists = () => {
     }
   };
 
-  const handleCreatePlaylist = async (e) => {
+  const handleEditPlaylist = (playlist) => {
+    setEditingPlaylist(playlist);
+    setNewPlaylist({ name: playlist.name, description: playlist.description || '', isPublic: playlist.isPublic });
+    setShowEditForm(true);
+  };
+
+  const handleSubmitPlaylist = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:8000/api/v1/playlists', {
-        method: 'POST',
+      const url = editingPlaylist ? `${API_BASE_URL}/playlists/${editingPlaylist._id}` : `${API_BASE_URL}/playlists`;
+      const method = editingPlaylist ? 'PUT' : 'POST';
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
@@ -67,19 +78,25 @@ const Playlists = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setPlaylists([data.data, ...playlists]);
+        if (editingPlaylist) {
+          setPlaylists(playlists.map(p => p._id === editingPlaylist._id ? { ...data.data, videos: data.data.videos.slice(0, 1) } : p));
+        } else {
+          setPlaylists([{ ...data.data, videos: data.data.videos.slice(0, 1) }, ...playlists]);
+        }
         setNewPlaylist({ name: '', description: '', isPublic: true });
         setShowCreateForm(false);
+        setShowEditForm(false);
+        setEditingPlaylist(null);
       }
     } catch (error) {
-      console.error('Error creating playlist:', error);
+      console.error('Error saving playlist:', error);
     }
   };
 
   const handleDeletePlaylist = async (playlistId) => {
     if (window.confirm('Are you sure you want to delete this playlist?')) {
       try {
-        const response = await fetch(`http://localhost:8000/api/v1/playlists/${playlistId}`, {
+        const response = await fetch(`${API_BASE_URL}/playlists/${playlistId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
@@ -130,11 +147,11 @@ const Playlists = () => {
         </button>
       </div>
 
-      {/* Create Playlist Form */}
-      {showCreateForm && (
+      {/* Create/Edit Playlist Form */}
+      {(showCreateForm || showEditForm) && (
         <div className="bg-dark-800 rounded-lg p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Create New Playlist</h3>
-          <form onSubmit={handleCreatePlaylist} className="space-y-4">
+          <h3 className="text-lg font-semibold text-white mb-4">{editingPlaylist ? 'Edit Playlist' : 'Create New Playlist'}</h3>
+          <form onSubmit={handleSubmitPlaylist} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Playlist Name *
@@ -174,7 +191,7 @@ const Playlists = () => {
             <div className="flex justify-end space-x-4">
               <button
                 type="button"
-                onClick={() => setShowCreateForm(false)}
+                onClick={() => { setShowCreateForm(false); setShowEditForm(false); setEditingPlaylist(null); }}
                 className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
               >
                 Cancel
@@ -183,7 +200,7 @@ const Playlists = () => {
                 type="submit"
                 className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
               >
-                Create Playlist
+                {editingPlaylist ? 'Update Playlist' : 'Create Playlist'}
               </button>
             </div>
           </form>
@@ -211,17 +228,17 @@ const Playlists = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {playlists.map((playlist) => (
-            <div key={playlist._id} className="bg-dark-800 rounded-lg overflow-hidden group">
+            <Link key={playlist._id} to={`/playlist/${playlist._id}`} className="bg-dark-800 rounded-lg overflow-hidden group block hover:bg-dark-750 transition-colors">
               <div className="relative">
-                {playlist.videos && playlist.videos.length > 0 ? (
+                {playlist.videos && playlist.videos.length > 0 && playlist.videos[0]?.thumbnail?.url ? (
                   <img
-                    src={playlist.videos[0]?.thumbnail?.url}
+                    src={playlist.videos[0].thumbnail.url}
                     alt={playlist.name}
                     className="w-full h-48 object-cover"
                   />
                 ) : (
-                  <div className="w-full h-48 bg-dark-700 flex items-center justify-center">
-                    <Video className="w-12 h-12 text-gray-400" />
+                  <div className="w-full h-48 bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
+                    <Video className="w-12 h-12 text-white" />
                   </div>
                 )}
                 <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
@@ -247,12 +264,12 @@ const Playlists = () => {
                     </button>
                     <div className="absolute right-0 top-8 w-48 bg-dark-700 border border-gray-600 rounded-lg shadow-lg opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all duration-200 z-10">
                       <div className="py-2">
-                        <button className="flex items-center space-x-3 px-4 py-2 hover:bg-dark-600 transition-colors w-full text-left text-white">
+                        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleEditPlaylist(playlist); }} className="flex items-center space-x-3 px-4 py-2 hover:bg-dark-600 transition-colors w-full text-left text-white">
                           <Edit3 className="w-4 h-4" />
                           <span>Edit</span>
                         </button>
                         <button
-                          onClick={() => handleDeletePlaylist(playlist._id)}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeletePlaylist(playlist._id); }}
                           className="flex items-center space-x-3 px-4 py-2 hover:bg-dark-600 transition-colors w-full text-left text-red-400"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -278,7 +295,7 @@ const Playlists = () => {
                   </div>
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}

@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // Async thunks
 export const fetchVideos = createAsyncThunk(
@@ -65,6 +65,23 @@ export const likeVideo = createAsyncThunk(
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to like video');
+    }
+  }
+);
+
+export const dislikeVideo = createAsyncThunk(
+  'video/dislikeVideo',
+  async (videoId, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await axios.post(`${API_BASE_URL}/dislikes/toggle/v/${videoId}`, {}, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to dislike video');
     }
   }
 );
@@ -163,9 +180,18 @@ const videoSlice = createSlice({
       })
       // Like video
       .addCase(likeVideo.fulfilled, (state, action) => {
-        // Update like count in current video if it's the same video
-        if (state.currentVideo && state.currentVideo._id === action.payload.data.videoId) {
-          state.currentVideo.likes = action.payload.data.totalLikes;
+        // Update like and dislike counts in current video
+        if (state.currentVideo) {
+          state.currentVideo.likesCount = action.payload.data.totalLikes;
+          state.currentVideo.dislikesCount = action.payload.data.totalDislikes;
+        }
+      })
+      // Dislike video
+      .addCase(dislikeVideo.fulfilled, (state, action) => {
+        // Update like and dislike counts in current video
+        if (state.currentVideo) {
+          state.currentVideo.likesCount = action.payload.data.totalLikes;
+          state.currentVideo.dislikesCount = action.payload.data.totalDislikes;
         }
       })
       // Fetch liked videos

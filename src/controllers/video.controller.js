@@ -5,6 +5,11 @@ import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
+import {deleteFromCloudinary} from "../utils/deletefromcloudinary.js"
+import { spawn } from 'child_process'
+import path from 'path'
+import fs from 'fs'
+import { fileURLToPath } from 'url'
 
 
 const getAllVideos = asyncHandler(async (req, res) => {
@@ -54,6 +59,28 @@ const getAllVideos = asyncHandler(async (req, res) => {
         },
         { $unwind: "$owner" },                // convert array to object
         {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "video",
+                as: "likes"
+            }
+        },
+        {
+            $lookup: {
+                from: "dislikes",
+                localField: "_id",
+                foreignField: "video",
+                as: "dislikes"
+            }
+        },
+        {
+            $addFields: {
+                likesCount: { $size: "$likes" },
+                dislikesCount: { $size: "$dislikes" }
+            }
+        },
+        {
             $project: {                       // select fields to return
                 title: 1,
                 description: 1,
@@ -62,6 +89,8 @@ const getAllVideos = asyncHandler(async (req, res) => {
                 duration: 1,
                 isPublished: 1,
                 createdAt: 1,
+                likesCount: 1,
+                dislikesCount: 1,
                 "owner.username": 1,
                 "owner.fullName": 1,
                 "owner.avatar": 1
@@ -88,16 +117,39 @@ const publishAVideo = asyncHandler(async (req, res) => {
     // Get uploaded file paths
     const videoLocalPath = req.files?.video?.[0]?.path;
     const thumbnailLocalPath = req.files?.thumbnail?.[0]?.path;
+    const videoFileSize = req.files?.video?.[0]?.size;
+    const thumbnailFileSize = req.files?.thumbnail?.[0]?.size;
 
     if (!videoLocalPath || !thumbnailLocalPath) {
         throw new ApiError(400, "Video and thumbnail are required");
     }
 
+    // Check file sizes (100MB limit for video, 10MB for thumbnail)
+    const maxVideoSize = 100 * 1024 * 1024; // 100MB
+    const maxThumbnailSize = 10 * 1024 * 1024; // 10MB
+
+    if (videoFileSize > maxVideoSize) {
+        throw new ApiError(400, "Video file is too large. Maximum size is 100MB");
+    }
+
+    if (thumbnailFileSize > maxThumbnailSize) {
+        throw new ApiError(400, "Thumbnail file is too large. Maximum size is 10MB");
+    }
+
+    console.log(`Video file size: ${(videoFileSize / 1024 / 1024).toFixed(2)}MB`);
+    console.log(`Thumbnail file size: ${(thumbnailFileSize / 1024 / 1024).toFixed(2)}MB`);
+
     // Upload to Cloudinary
+    console.log('Starting video upload to Cloudinary...');
     const videoFile = await uploadOnCloudinary(videoLocalPath);
+    console.log('Video upload result:', videoFile ? 'Success' : 'Failed');
+    
+    console.log('Starting thumbnail upload to Cloudinary...');
     const thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
+    console.log('Thumbnail upload result:', thumbnail ? 'Success' : 'Failed');
 
     if (!videoFile || !thumbnail) {
+        console.error('Upload failed - Video:', !!videoFile, 'Thumbnail:', !!thumbnail);
         throw new ApiError(400, "Failed to upload video/thumbnail");
     }
 
@@ -117,6 +169,10 @@ const publishAVideo = asyncHandler(async (req, res) => {
         owner: req.user._id,                // logged-in user from auth middleware
     });
 
+    console.log('Video created successfully:', video);
+    console.log('Video owner:', video.owner);
+    console.log('Request user ID:', req.user._id);
+
     return res
         .status(201)
         .json(new ApiResponse(201, video, "Video published successfully"));
@@ -126,40 +182,116 @@ const publishAVideo = asyncHandler(async (req, res) => {
 const getVideoById = asyncHandler(async (req, res) => {
     const { videoId } = req.params;
 
+    console.log('getVideoById called with videoId:', videoId);
+
     // Validate videoId
     if (!mongoose.Types.ObjectId.isValid(videoId)) {
         throw new ApiError(400, "Invalid video ID");
     }
 
-    // Query video and populate owner info
-    const video = await Video.findById(videoId)
-        .populate("owner", "username avatar fullName")
-        .select("title description thumbnail views duration createdAt owner isPublished"); // added isPublished for improved check
+    // Query video with owner info, subscriber count, and like/dislike counts
+    const video = await Video.aggregate([
+        { $match: { _id: new mongoose.Types.ObjectId(videoId) } },
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        { $unwind: "$owner" },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "owner._id",
+                foreignField: "channel",
+                as: "subscribers"
+            }
+        },
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "video",
+                as: "likes"
+            }
+        },
+        {
+            $lookup: {
+                from: "dislikes",
+                localField: "_id",
+                foreignField: "video",
+                as: "dislikes"
+            }
+        },
+        {
+            $addFields: {
+                "owner.subscribersCount": { $size: "$subscribers" },
+                likesCount: { $size: "$likes" },
+                dislikesCount: { $size: "$dislikes" },
+                isLikedByUser: req.user ? {
+                    $in: [new mongoose.Types.ObjectId(req.user._id), "$likes.likedBy"]
+                } : false,
+                isDislikedByUser: req.user ? {
+                    $in: [new mongoose.Types.ObjectId(req.user._id), "$dislikes.dislikedBy"]
+                } : false
+            }
+        },
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                thumbnail: 1,
+                videoFile: 1,
+                views: 1,
+                duration: 1,
+                createdAt: 1,
+                isPublished: 1,
+                likesCount: 1,
+                dislikesCount: 1,
+                isLikedByUser: 1,
+                isDislikedByUser: 1,
+                owner: {
+                    _id: 1,
+                    username: 1,
+                    fullName: 1,
+                    avatar: 1,
+                    subscribersCount: 1
+                }
+            }
+        }
+    ]);
 
-    if (!video) {
+    const videoData = video[0];
+
+    console.log('Video found:', videoData ? videoData._id : 'null');
+    console.log('Video owner:', videoData?.owner);
+    console.log('Video owner username:', videoData?.owner?.username);
+
+    if (!videoData) {
         throw new ApiError(404, "Video doesn't exist");
     }
 
     // IMPROVEMENT: Check if video is unpublished and requester is not the owner
-    if (!video.isPublished && (!req.user || video.owner._id.toString() !== req.user._id.toString())) {
+    if (!videoData.isPublished && (!req.user || videoData.owner._id.toString() !== req.user._id.toString())) {
         throw new ApiError(403, "You are not allowed to view this video");
     }
 
-    // Increment views
-    video.views = video.views + 1;
-    await video.save();
+    // Increment views - need to update the actual document
+    await Video.findByIdAndUpdate(videoId, { $inc: { views: 1 } });
 
     // IMPROVEMENT: Add to watch history if user is logged in
     if (req.user) {
         await User.findByIdAndUpdate(req.user._id, {
-            $addToSet: { watchHistory: video._id }
+            $addToSet: { watchHistory: videoData._id }
         });
     }
 
     // Return response
     return res
         .status(200)
-        .json(new ApiResponse(200, video, "Video fetched successfully"));
+        .json(new ApiResponse(200, videoData, "Video fetched successfully"));
 });
 
 
@@ -343,7 +475,7 @@ const getVideoRecommendations = asyncHandler(async (req, res) => {
                 recommendationScore: {
                     $add: [
                         // Score based on views (popularity)
-                        { $multiply: [{ $log: { $add: ["$views", 1] } }, 0.3] },
+                        { $multiply: [{ $log: [{ $add: ["$views", 1] }, 10] }, 0.3] },
                         
                         // Score based on recency (newer videos get higher score)
                         { $multiply: [{ $divide: [{ $subtract: [new Date(), "$createdAt"] }, 86400000] }, -0.1] },
@@ -382,6 +514,29 @@ const getVideoRecommendations = asyncHandler(async (req, res) => {
         // Limit results
         { $limit: parseInt(limit) },
 
+        // Lookup likes and dislikes
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "video",
+                as: "likes"
+            }
+        },
+        {
+            $lookup: {
+                from: "dislikes",
+                localField: "_id",
+                foreignField: "video",
+                as: "dislikes"
+            }
+        },
+        {
+            $addFields: {
+                likesCount: { $size: "$likes" },
+                dislikesCount: { $size: "$dislikes" }
+            }
+        },
         // Project only necessary fields
         {
             $project: {
@@ -391,6 +546,8 @@ const getVideoRecommendations = asyncHandler(async (req, res) => {
                 duration: 1,
                 views: 1,
                 createdAt: 1,
+                likesCount: 1,
+                dislikesCount: 1,
                 "owner.username": 1,
                 "owner.fullName": 1,
                 "owner.avatar": 1
@@ -468,6 +625,29 @@ const getTrendingVideos = asyncHandler(async (req, res) => {
         // Limit results
         { $limit: parseInt(limit) },
 
+        // Lookup likes and dislikes
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "video",
+                as: "likes"
+            }
+        },
+        {
+            $lookup: {
+                from: "dislikes",
+                localField: "_id",
+                foreignField: "video",
+                as: "dislikes"
+            }
+        },
+        {
+            $addFields: {
+                likesCount: { $size: "$likes" },
+                dislikesCount: { $size: "$dislikes" }
+            }
+        },
         // Project only necessary fields
         {
             $project: {
@@ -478,6 +658,8 @@ const getTrendingVideos = asyncHandler(async (req, res) => {
                 views: 1,
                 createdAt: 1,
                 trendingScore: 1,
+                likesCount: 1,
+                dislikesCount: 1,
                 "owner.username": 1,
                 "owner.fullName": 1,
                 "owner.avatar": 1
@@ -516,13 +698,13 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
 
     const pipeline = [
         // Match published videos (excluding current video)
-        { 
-            $match: { 
+        {
+            $match: {
                 isPublished: true,
                 _id: { $ne: new mongoose.Types.ObjectId(videoId) }
-            } 
+            }
         },
-        
+
         // Lookup owner information
         {
             $lookup: {
@@ -545,7 +727,7 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
                             3.0, // High score for same channel
                             0
                         ]},
-                        
+
                         // Score for keyword matches in title
                         { $multiply: [
                             { $size: { $setIntersection: [
@@ -554,7 +736,7 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
                             ]}},
                             1.5
                         ]},
-                        
+
                         // Score for keyword matches in description
                         { $multiply: [
                             { $size: { $setIntersection: [
@@ -563,7 +745,7 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
                             ]}},
                             0.5
                         ]},
-                        
+
                         // Score based on views (popularity)
                         { $multiply: [{ $log: { $add: ["$views", 1] } }, 0.2] }
                     ]
@@ -577,6 +759,29 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
         // Limit results
         { $limit: parseInt(limit) },
 
+        // Lookup likes and dislikes
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "video",
+                as: "likes"
+            }
+        },
+        {
+            $lookup: {
+                from: "dislikes",
+                localField: "_id",
+                foreignField: "video",
+                as: "dislikes"
+            }
+        },
+        {
+            $addFields: {
+                likesCount: { $size: "$likes" },
+                dislikesCount: { $size: "$dislikes" }
+            }
+        },
         // Project only necessary fields
         {
             $project: {
@@ -586,6 +791,8 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
                 duration: 1,
                 views: 1,
                 createdAt: 1,
+                likesCount: 1,
+                dislikesCount: 1,
                 "owner.username": 1,
                 "owner.fullName": 1,
                 "owner.avatar": 1
@@ -600,6 +807,138 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, relatedVideos, "Related videos fetched successfully"));
 });
 
+const convertVideoToAudio = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+
+    // Validate videoId
+    if (!mongoose.Types.ObjectId.isValid(videoId)) {
+        throw new ApiError(400, "Invalid video ID");
+    }
+
+    // Find the video
+    const video = await Video.findById(videoId);
+    if (!video) {
+        throw new ApiError(404, "Video not found");
+    }
+
+    // Check if video is published or if user is the owner
+    if (!video.isPublished && (!req.user || video.owner.toString() !== req.user._id.toString())) {
+        throw new ApiError(403, "You are not allowed to access this video");
+    }
+
+    // Get video URL from Cloudinary
+    const videoUrl = video.videoFile.url;
+    if (!videoUrl) {
+        throw new ApiError(400, "Video file not available");
+    }
+
+    // Create temporary directory for processing
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const tempDir = path.join(__dirname, '../../temp');
+
+    if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    // Generate unique filename for audio output
+    const audioFilename = `audio_${videoId}_${Date.now()}.mp3`;
+    const audioPath = path.join(tempDir, audioFilename);
+
+    try {
+        // Convert video to audio using Python script
+        const pythonScript = path.join(__dirname, '../../convert_video.py');
+
+        console.log('Starting Python conversion process...');
+        console.log('Python script path:', pythonScript);
+        console.log('Video URL:', videoUrl);
+        console.log('Audio output path:', audioPath);
+
+        // First, check if the video URL is accessible
+        try {
+            const urlCheck = await fetch(videoUrl, { method: 'HEAD' });
+            if (!urlCheck.ok) {
+                throw new ApiError(400, `Video URL is not accessible (HTTP ${urlCheck.status})`);
+            }
+            console.log('Video URL is accessible');
+        } catch (urlError) {
+            console.error('Video URL check failed:', urlError.message);
+            throw new ApiError(400, `Cannot access video URL: ${urlError.message}`);
+        }
+
+        await new Promise((resolve, reject) => {
+            const pythonProcess = spawn('python', [pythonScript, videoUrl, audioPath], {
+                stdio: ['pipe', 'pipe', 'pipe'],
+                cwd: path.dirname(pythonScript) // Set working directory to script location
+            });
+
+            let stdout = '';
+            let stderr = '';
+
+            pythonProcess.stdout.on('data', (data) => {
+                stdout += data.toString();
+                console.log('Python stdout:', data.toString());
+            });
+
+            pythonProcess.stderr.on('data', (data) => {
+                stderr += data.toString();
+                console.log('Python stderr:', data.toString());
+            });
+
+            pythonProcess.on('close', (code) => {
+                console.log('Python process exited with code:', code);
+                if (code === 0) {
+                    console.log('Python audio conversion completed successfully');
+                    resolve();
+                } else {
+                    console.error('Python conversion failed with code:', code);
+                    console.error('Stdout:', stdout);
+                    console.error('Stderr:', stderr);
+                    reject(new ApiError(500, `Audio conversion failed: ${stderr || 'Unknown error'}`));
+                }
+            });
+
+            pythonProcess.on('error', (err) => {
+                console.error('Failed to start Python process:', err);
+                reject(new ApiError(500, `Audio conversion process failed: ${err.message}`));
+            });
+        });
+
+        // Check if audio file was created
+        if (!fs.existsSync(audioPath)) {
+            throw new ApiError(500, 'Audio file was not created');
+        }
+
+        // Upload audio to Cloudinary
+        const audioUpload = await uploadOnCloudinary(audioPath);
+        if (!audioUpload) {
+            throw new ApiError(500, 'Failed to upload audio file');
+        }
+
+        // Clean up temporary file
+        if (fs.existsSync(audioPath)) {
+            fs.unlinkSync(audioPath);
+        }
+
+        // Return the audio URL
+        return res
+            .status(200)
+            .json(new ApiResponse(200, {
+                audioUrl: audioUpload.secure_url,
+                publicId: audioUpload.public_id,
+                title: video.title,
+                duration: video.duration
+            }, "Video converted to audio successfully"));
+
+    } catch (error) {
+        // Clean up temporary file in case of error
+        if (fs.existsSync(audioPath)) {
+            fs.unlinkSync(audioPath);
+        }
+        throw error;
+    }
+});
+
 export {
     getAllVideos,
     publishAVideo,
@@ -609,5 +948,6 @@ export {
     togglePublishStatus,
     getVideoRecommendations,
     getTrendingVideos,
-    getRelatedVideos
+    getRelatedVideos,
+    convertVideoToAudio
 }

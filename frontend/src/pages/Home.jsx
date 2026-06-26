@@ -7,18 +7,16 @@ import { Play, Clock, Eye, ThumbsUp } from 'lucide-react';
 const Home = () => {
   const dispatch = useDispatch();
   const { videos, loading, error } = useSelector((state) => state.video);
-  const [selectedCategory, setSelectedCategory] = useState('All');
-
-  const categories = ['All', 'Music', 'Gaming', 'Sports', 'News', 'Entertainment', 'Education'];
 
   useEffect(() => {
     dispatch(fetchVideos());
   }, [dispatch]);
 
   const formatDuration = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    const numSeconds = Number(seconds) || 0;
+    const hours = Math.floor(numSeconds / 3600);
+    const minutes = Math.floor((numSeconds % 3600) / 60);
+    const secs = Math.floor(numSeconds % 60);
     
     if (hours > 0) {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
@@ -67,22 +65,6 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-dark-900">
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Categories */}
-        <div className="flex space-x-3 mb-8 overflow-x-auto pb-2">
-          {categories.map((category) => (
-            <button
-              key={category}
-              onClick={() => setSelectedCategory(category)}
-              className={`px-6 py-3 rounded-full whitespace-nowrap transition-all duration-200 font-medium ${
-                selectedCategory === category
-                  ? 'bg-white text-black shadow-lg'
-                  : 'bg-dark-800 text-gray-300 hover:bg-dark-700 hover:text-white border border-dark-600'
-              }`}
-            >
-              {category}
-            </button>
-          ))}
-        </div>
 
         {/* Videos Grid */}
         {videos.length === 0 ? (

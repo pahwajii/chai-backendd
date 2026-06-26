@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // Async thunks
 export const fetchTweets = createAsyncThunk(
@@ -77,15 +77,51 @@ export const likeTweet = createAsyncThunk(
           Authorization: `Bearer ${token}`,
         },
       });
-      return response.data;
+      return { tweetId, data: response.data };
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to like tweet');
     }
   }
 );
 
+export const fetchTweetComments = createAsyncThunk(
+  'tweet/fetchTweetComments',
+  async ({ tweetId, page = 1, limit = 10 }, { rejectWithValue }) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/comments/tweet/${tweetId}`, {
+        params: { page, limit },
+      });
+      return { tweetId, data: response.data };
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch tweet comments');
+    }
+  }
+);
+
+export const addTweetComment = createAsyncThunk(
+  'tweet/addTweetComment',
+  async ({ tweetId, content }, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await axios.post(
+        `${API_BASE_URL}/comments/tweet/${tweetId}`,
+        { content },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      return { tweetId, data: response.data };
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to add comment');
+    }
+  }
+);
+
 const initialState = {
   tweets: [],
+  comments: {},
   loading: false,
   error: null,
 };
@@ -139,6 +175,40 @@ const tweetSlice = createSlice({
       // Delete tweet
       .addCase(deleteTweet.fulfilled, (state, action) => {
         state.tweets = state.tweets.filter(tweet => tweet._id !== action.payload);
+      })
+      // Like tweet
+      .addCase(likeTweet.fulfilled, (state, action) => {
+        const { tweetId } = action.payload;
+        const tweet = state.tweets.find(t => t._id === tweetId);
+        if (tweet) {
+          tweet.likesCount = action.payload.data.data.totalLikes;
+        }
+      })
+      // Fetch tweet comments
+      .addCase(fetchTweetComments.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchTweetComments.fulfilled, (state, action) => {
+        state.loading = false;
+        const { tweetId, data } = action.payload;
+        state.comments[tweetId] = data.data.docs || data.data || [];
+      })
+      .addCase(fetchTweetComments.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Add tweet comment
+      .addCase(addTweetComment.fulfilled, (state, action) => {
+        const { tweetId } = action.payload;
+        if (state.comments[tweetId]) {
+          state.comments[tweetId].unshift(action.payload.data);
+        }
+        // Update comment count in tweets
+        const tweet = state.tweets.find(t => t._id === tweetId);
+        if (tweet) {
+          tweet.commentsCount = (tweet.commentsCount || 0) + 1;
+        }
       });
   },
 });

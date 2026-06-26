@@ -1,13 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useSearchParams, Link } from 'react-router-dom';
 import { fetchVideos } from '../store/slices/videoSlice';
-import { Search as SearchIcon, Play, Eye, Clock } from 'lucide-react';
+import { Play, Eye, Clock, SearchIcon } from 'lucide-react';
 
 const Search = () => {
   const dispatch = useDispatch();
   const { videos, loading } = useSelector((state) => state.video);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
   const [searchResults, setSearchResults] = useState([]);
+
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q && q !== searchQuery) {
+      setSearchQuery(q);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -15,12 +24,6 @@ const Search = () => {
     }
   }, [dispatch, searchQuery]);
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      dispatch(fetchVideos({ query: searchQuery }));
-    }
-  };
 
   const formatViews = (views) => {
     if (views >= 1000000) {
@@ -44,22 +47,22 @@ const Search = () => {
     return `${Math.floor(diffDays / 365)} years ago`;
   };
 
+  const formatDuration = (seconds) => {
+    const numSeconds = Number(seconds) || 0;
+    const hours = Math.floor(numSeconds / 3600);
+    const minutes = Math.floor((numSeconds % 3600) / 60);
+    const secs = Math.floor(numSeconds % 60);
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-4">Search</h1>
-        
-        {/* Search Form */}
-        <form onSubmit={handleSearch} className="relative max-w-2xl">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search videos..."
-            className="w-full bg-dark-800 border border-gray-600 rounded-lg px-4 py-3 pl-12 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          />
-          <SearchIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-        </form>
+        <h1 className="text-2xl font-bold text-white mb-4">Search Results</h1>
       </div>
 
       {/* Search Results */}
@@ -76,48 +79,54 @@ const Search = () => {
       ) : (
         <div className="space-y-4">
           {videos.map((video) => (
-            <div key={video._id} className="flex space-x-4 p-4 bg-dark-800 rounded-lg hover:bg-dark-700 transition-colors">
-              <div className="relative w-80 h-48 flex-shrink-0">
-                <img
-                  src={video.thumbnail?.url}
-                  alt={video.title}
-                  className="w-full h-full object-cover rounded-lg"
-                />
-                <div className="absolute bottom-2 right-2 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
-                  {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
-                </div>
-                <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-20 transition-all duration-200 rounded-lg flex items-center justify-center">
-                  <Play className="w-12 h-12 text-white opacity-0 hover:opacity-100 transition-opacity duration-200" />
-                </div>
-              </div>
-              
-              <div className="flex-1">
-                <h3 className="text-lg font-medium text-white mb-2 line-clamp-2">
-                  {video.title}
-                </h3>
-                <div className="flex items-center space-x-4 text-sm text-gray-400 mb-2">
-                  <div className="flex items-center space-x-1">
-                    <Eye className="w-4 h-4" />
-                    <span>{formatViews(video.views)} views</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <Clock className="w-4 h-4" />
-                    <span>{formatDate(video.createdAt)}</span>
-                  </div>
-                </div>
-                <p className="text-gray-300 line-clamp-2 mb-2">
-                  {video.description}
-                </p>
-                <div className="flex items-center space-x-2">
+            <Link
+              key={video._id}
+              to={`/video/${video._id}`}
+              className="block"
+            >
+              <div className="flex space-x-4 p-4 bg-dark-800 rounded-lg hover:bg-dark-700 transition-colors">
+                <div className="relative w-80 h-48 flex-shrink-0">
                   <img
-                    src={video.owner?.avatar?.url || '/default-avatar.png'}
-                    alt={video.owner?.fullName}
-                    className="w-8 h-8 rounded-full"
+                    src={video.thumbnail?.url}
+                    alt={video.title}
+                    className="w-full h-full object-cover rounded-lg"
                   />
-                  <span className="text-sm text-gray-400">{video.owner?.fullName}</span>
+                  <div className="absolute bottom-2 right-2 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
+                    {formatDuration(video.duration)}
+                  </div>
+                  <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-20 transition-all duration-200 rounded-lg flex items-center justify-center">
+                    <Play className="w-12 h-12 text-white opacity-0 hover:opacity-100 transition-opacity duration-200" />
+                  </div>
+                </div>
+
+                <div className="flex-1">
+                  <h3 className="text-lg font-medium text-white mb-2 line-clamp-2">
+                    {video.title}
+                  </h3>
+                  <div className="flex items-center space-x-4 text-sm text-gray-400 mb-2">
+                    <div className="flex items-center space-x-1">
+                      <Eye className="w-4 h-4" />
+                      <span>{formatViews(video.views)} views</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <Clock className="w-4 h-4" />
+                      <span>{formatDate(video.createdAt)}</span>
+                    </div>
+                  </div>
+                  <p className="text-gray-300 line-clamp-2 mb-2">
+                    {video.description}
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <img
+                      src={video.owner?.avatar?.url || '/default-avatar.png'}
+                      alt={video.owner?.fullName}
+                      className="w-8 h-8 rounded-full"
+                    />
+                    <span className="text-sm text-gray-400">{video.owner?.fullName}</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}

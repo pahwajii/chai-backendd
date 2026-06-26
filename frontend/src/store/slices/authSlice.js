@@ -1,7 +1,8 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // Async thunks
 export const loginUser = createAsyncThunk(
@@ -45,6 +46,30 @@ export const registerUser = createAsyncThunk(
   }
 );
 
+export const initializeAuth = createAsyncThunk(
+  'auth/initializeAuth',
+  async (_, { dispatch, rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        throw new Error('No token found');
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/users/current-user`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return response.data;
+    } catch (error) {
+      // If token is invalid, clear it
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      return rejectWithValue(error.response?.data?.message || 'Authentication failed');
+    }
+  }
+);
+
 export const getCurrentUser = createAsyncThunk(
   'auth/getCurrentUser',
   async (_, { rejectWithValue }) => {
@@ -81,6 +106,60 @@ export const logoutUser = createAsyncThunk(
   }
 );
 
+export const updateAccountDetails = createAsyncThunk(
+  'auth/updateAccountDetails',
+  async (userData, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await axios.patch(`${API_BASE_URL}/users/update-acc-details`, userData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Update failed');
+    }
+  }
+);
+
+export const updateUserAvatar = createAsyncThunk(
+  'auth/updateUserAvatar',
+  async (file, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const formData = new FormData();
+      formData.append('avatar', file);
+      const response = await axios.patch(`${API_BASE_URL}/users/update-avatar`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Avatar update failed');
+    }
+  }
+);
+
+export const changeCurrentPassword = createAsyncThunk(
+  'auth/changeCurrentPassword',
+  async (passwordData, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await axios.post(`${API_BASE_URL}/users/change-password`, passwordData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Password change failed');
+    }
+  }
+);
+
 const initialState = {
   user: null,
   isAuthenticated: false,
@@ -108,6 +187,19 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      // Initialize auth
+      .addCase(initializeAuth.fulfilled, (state, action) => {
+        state.user = action.payload.data;
+        state.isAuthenticated = true;
+        state.loading = false;
+      })
+      .addCase(initializeAuth.rejected, (state) => {
+        state.user = null;
+        state.isAuthenticated = false;
+        state.loading = false;
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+      })
       // Login
       .addCase(loginUser.pending, (state) => {
         state.loading = true;
@@ -159,6 +251,18 @@ const authSlice = createSlice({
       .addCase(logoutUser.fulfilled, (state) => {
         state.user = null;
         state.isAuthenticated = false;
+      })
+      // Update account details
+      .addCase(updateAccountDetails.fulfilled, (state, action) => {
+        state.user = action.payload.data;
+      })
+      // Update avatar
+      .addCase(updateUserAvatar.fulfilled, (state, action) => {
+        state.user = action.payload.data;
+      })
+      // Change password
+      .addCase(changeCurrentPassword.fulfilled, (state) => {
+        // No state change needed, just success
       });
   },
 });

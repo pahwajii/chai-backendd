@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { getCurrentUser } from '../store/slices/authSlice';
 import { History as HistoryIcon, Play, Eye, Clock, Trash2, Filter, SortAsc } from 'lucide-react';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const History = () => {
   const dispatch = useDispatch();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
@@ -21,15 +22,21 @@ const History = () => {
   const fetchWatchHistory = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:8000/api/v1/users/History', {
+      console.log('Fetching watch history...');
+      const response = await fetch(`${API_BASE_URL}/users/History`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
       });
-      
+
+      console.log('Watch history response status:', response.status);
       if (response.ok) {
         const data = await response.json();
+        console.log('Watch history data:', data);
         setWatchHistory(data.data || []);
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to fetch watch history:', response.status, errorData);
       }
     } catch (error) {
       console.error('Error fetching watch history:', error);
@@ -73,9 +80,10 @@ const History = () => {
   };
 
   const formatDuration = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    const numSeconds = Number(seconds) || 0;
+    const hours = Math.floor(numSeconds / 3600);
+    const minutes = Math.floor((numSeconds % 3600) / 60);
+    const secs = Math.floor(numSeconds % 60);
     
     if (hours > 0) {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
